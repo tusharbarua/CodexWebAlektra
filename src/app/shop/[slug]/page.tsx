@@ -4,6 +4,7 @@ import { Download } from "lucide-react";
 import { PublishStatus } from "@prisma/client";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { ProductCard } from "@/components/ProductCard";
+import { ProductGallery } from "@/components/ProductGallery";
 import { money } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -13,22 +14,25 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const { slug } = await params;
   const product = await prisma.product.findFirst({
     where: { slug, status: PublishStatus.PUBLISHED },
-    include: { category: true, images: { orderBy: { sortOrder: "asc" } } }
+    include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } }
   });
   if (!product) notFound();
   const related = await prisma.product.findMany({
     where: { categoryId: product.categoryId, status: PublishStatus.PUBLISHED, id: { not: product.id } },
-    include: { category: true, images: { orderBy: { sortOrder: "asc" } } },
+    include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
     take: 3
   });
   const specs = Object.entries(product.specifications as Record<string, string>);
-  const image = product.images[0]?.url ?? fallbackImage;
+  const galleryImages = product.images.length
+    ? product.images.map((image) => ({ id: image.id, imagePath: image.imagePath, altText: image.altText }))
+    : [{ id: "fallback", imagePath: fallbackImage, altText: product.name }];
+  const image = galleryImages[0].imagePath;
 
   return (
     <main className="page-shell">
       <div className="container">
         <div className="intro-grid">
-          <div className="visual-band" style={{ backgroundImage: `linear-gradient(180deg, rgba(0,92,45,.08), rgba(7,20,17,.28)), url(${image})` }} />
+          <ProductGallery images={galleryImages} productName={product.name} />
           <div className="panel">
             <p className="kicker">{product.category.name}</p><h1>{product.name}</h1><p>{product.shortDescription}</p>
             <div className="price-row"><span className="price">{money(Number(product.priceBdt))}</span><span className="stock">{product.stockQuantity > 0 ? `${product.stockQuantity} in stock` : "Out of stock"} | SKU {product.sku}</span></div>
@@ -41,7 +45,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
         {related.length ? <section className="section tight"><div className="section-heading"><h2>Related products</h2><p>More equipment from this category.</p></div><div className="shop-grid">
-          {related.map((item) => <ProductCard key={item.id} product={{ name: item.name, slug: item.slug, sku: item.sku, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.url ?? fallbackImage, description: item.shortDescription }} />)}
+          {related.map((item) => <ProductCard key={item.id} product={{ name: item.name, slug: item.slug, sku: item.sku, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage, description: item.shortDescription }} />)}
         </div></section> : null}
         <p><Link className="btn secondary" href="/shop">Back to shop</Link></p>
       </div>

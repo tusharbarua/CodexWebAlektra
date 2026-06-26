@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Solar module product image">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#e8fff5"/>
+      <stop offset="1" stop-color="#b7e8cb"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="1">
+      <stop offset="0" stop-color="#09231d"/>
+      <stop offset="1" stop-color="#104f3a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="965" cy="130" r="78" fill="#f6c45f"/>
+  <g transform="translate(150 180) skewX(-16)">
+    <rect width="760" height="420" rx="22" fill="url(#panel)"/>
+    <g stroke="#58d58f" stroke-width="5" opacity=".78">
+      <path d="M95 0v420M190 0v420M285 0v420M380 0v420M475 0v420M570 0v420M665 0v420"/>
+      <path d="M0 84h760M0 168h760M0 252h760M0 336h760"/>
+    </g>
+  </g>
+</svg>

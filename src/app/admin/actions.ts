@@ -1,8 +1,11 @@
 "use server";
 
 import { PublishStatus } from "@prisma/client";
+import { randomUUID } from "crypto";
+import { mkdir, unlink, writeFile } from "fs/promises";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import path from "path";
 import { z } from "zod";
 import { auth, isAdminRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +27,46 @@ function refresh(...paths: string[]) {
   for (const path of paths) revalidatePath(path);
 }
 
+function productError(message: string, productId?: string): never {
+  const target = `/admin/products?error=${encodeURIComponent(message)}${productId ? `&edit=${productId}` : ""}`;
+  redirect(target);
+}
+
+const allowedProductImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const maxProductImageSize = 2 * 1024 * 1024;
+
+function getUploadedImages(formData: FormData) {
+  return formData.getAll("productImages").filter((entry): entry is File => {
+    return typeof entry === "object" && "arrayBuffer" in entry && entry.size > 0;
+  });
+}
+
+async function saveUploadedProductImage(file: File) {
+  if (!allowedProductImageTypes.has(file.type)) {
+    throw new Error("Only JPG, PNG and WebP product images are allowed.");
+  }
+  if (file.size > maxProductImageSize) {
+    throw new Error("Each product image must be 2 MB or smaller.");
+  }
+  const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const baseName = path.parse(file.name).name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "product";
+  const fileName = `${baseName}-${randomUUID()}.${extension}`;
+  const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(path.join(uploadDir, fileName), Buffer.from(await file.arrayBuffer()));
+  return `/uploads/products/${fileName}`;
+}
+
+async function removePublicUpload(imagePath: string) {
+  if (!imagePath.startsWith("/uploads/products/")) return;
+  const fileName = path.basename(imagePath);
+  try {
+    await unlink(path.join(process.cwd(), "public", "uploads", "products", fileName));
+  } catch {
+    // Missing files should not block product editing.
+  }
+}
+
 export async function saveProduct(formData: FormData) {
   await requireAdmin();
   const schema = z.object({
@@ -43,7 +86,11 @@ export async function saveProduct(formData: FormData) {
     manualUrl: z.string().optional(),
     status: z.nativeEnum(PublishStatus)
   });
-  const data = schema.parse({
+  const productId = optional(formData.get("id")) ?? undefined;
+  const uploadedFiles = getUploadedImages(formData);
+  let data: z.infer<typeof schema>;
+  try {
+    data = schema.parse({
     id: optional(formData.get("id")) ?? undefined,
     name: text(formData.get("name")),
     slug: text(formData.get("slug")),
@@ -59,7 +106,29 @@ export async function saveProduct(formData: FormData) {
     datasheetUrl: text(formData.get("datasheetUrl")),
     manualUrl: text(formData.get("manualUrl")),
     status: status(formData.get("status"))
-  });
+    });
+  } catch {
+    productError("Please complete all required product fields with valid values.", productId);
+  }
+
+  const existingImages = data.id
+    ? await prisma.productImage.findMany({ where: { productId: data.id }, orderBy: { sortOrder: "asc" } })
+    : [];
+  const deletedIds = new Set(formData.getAll("deleteImageId").map(String));
+  const keptImages = existingImages.filter((image) => !deletedIds.has(image.id));
+  if (keptImages.length + uploadedFiles.length < 3) {
+    productError("Upload at least 3 product images before saving.", data.id);
+  }
+
+  for (const file of uploadedFiles) {
+    if (!allowedProductImageTypes.has(file.type)) {
+      productError("Only JPG, JPEG, PNG and WebP product images are allowed.", data.id);
+    }
+    if (file.size > maxProductImageSize) {
+      productError("Each product image must be 2 MB or smaller.", data.id);
+    }
+  }
+
   const specifications = Object.fromEntries(
     data.specifications.split(/\r?\n/).map((row) => {
       const [key, ...rest] = row.split(":");
@@ -86,11 +155,51 @@ export async function saveProduct(formData: FormData) {
   const product = data.id
     ? await prisma.product.update({ where: { id: data.id }, data: productData })
     : await prisma.product.create({ data: productData });
-  await prisma.productImage.deleteMany({ where: { productId: product.id } });
-  const imageUrls = lines(formData.get("imageUrls"));
-  if (imageUrls.length) {
-    await prisma.productImage.createMany({
-      data: imageUrls.map((url, index) => ({ productId: product.id, url, alt: product.name, sortOrder: index }))
+
+  const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
+  if (imagesToDelete.length) {
+    await prisma.productImage.deleteMany({ where: { id: { in: imagesToDelete.map((image) => image.id) } } });
+    await Promise.all(imagesToDelete.map((image) => removePublicUpload(image.imagePath)));
+  }
+
+  const primaryImage = text(formData.get("primaryImage"));
+  await Promise.all(
+    keptImages.map((image) =>
+      prisma.productImage.update({
+        where: { id: image.id },
+        data: {
+          altText: text(formData.get(`imageAlt_${image.id}`)) || product.name,
+          sortOrder: Number(text(formData.get(`imageSort_${image.id}`)) || image.sortOrder),
+          isPrimary: primaryImage === image.id
+        }
+      })
+    )
+  );
+
+  const createdImages = [];
+  for (const [index, file] of uploadedFiles.entries()) {
+    try {
+      const imagePath = await saveUploadedProductImage(file);
+      createdImages.push(await prisma.productImage.create({
+        data: {
+          productId: product.id,
+          imagePath,
+          altText: product.name,
+          sortOrder: keptImages.length + index,
+          isPrimary: primaryImage === `new-${index}` || (!primaryImage && keptImages.length === 0 && index === 0)
+        }
+      }));
+    } catch (error) {
+      productError(error instanceof Error ? error.message : "Product image upload failed.", product.id);
+    }
+  }
+
+  const finalImages = await prisma.productImage.findMany({ where: { productId: product.id }, orderBy: { sortOrder: "asc" } });
+  if (finalImages.length && !finalImages.some((image) => image.isPrimary)) {
+    const firstCreatedPrimary = createdImages.find((image) => image.isPrimary);
+    await prisma.productImage.update({
+      where: { id: firstCreatedPrimary?.id ?? finalImages[0].id },
+      data: { isPrimary: true }
     });
   }
   refresh("/", "/shop", `/shop/${product.slug}`, "/admin/products");
@@ -330,6 +439,38 @@ export async function saveSeo(formData: FormData) {
   await prisma.seoMetadata.upsert({ where: { route: data.route }, update: payload, create: payload });
   refresh("/", "/admin/seo");
   redirect("/admin/seo");
+}
+
+export async function saveFooterSettings(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    contactEmail: z.string().email("Enter a valid contact email."),
+    contactPhone: z.string().min(6, "Enter a valid phone number."),
+    address: z.string().min(3, "Enter the footer address."),
+    facebookUrl: z.string().url("Enter a valid Facebook URL.").or(z.literal("")).optional(),
+    linkedinUrl: z.string().url("Enter a valid LinkedIn URL.").or(z.literal("")).optional(),
+    youtubeUrl: z.string().url("Enter a valid YouTube URL.").or(z.literal("")).optional(),
+    whatsappNumber: z.string().optional(),
+    footerDescription: z.string().min(20, "Footer description should be at least 20 characters."),
+    copyrightText: z.string().min(5, "Enter copyright text.")
+  }).parse({
+    contactEmail: text(formData.get("contactEmail")),
+    contactPhone: text(formData.get("contactPhone")),
+    address: text(formData.get("address")),
+    facebookUrl: text(formData.get("facebookUrl")),
+    linkedinUrl: text(formData.get("linkedinUrl")),
+    youtubeUrl: text(formData.get("youtubeUrl")),
+    whatsappNumber: text(formData.get("whatsappNumber")),
+    footerDescription: text(formData.get("footerDescription")),
+    copyrightText: text(formData.get("copyrightText"))
+  });
+  await prisma.siteSettings.upsert({
+    where: { singletonKey: "footer" },
+    update: data,
+    create: { singletonKey: "footer", ...data }
+  });
+  refresh("/", "/thermal", "/shop", "/resources", "/admin/site-settings/footer");
+  redirect("/admin/site-settings/footer?saved=1");
 }
 
 export async function deleteSeo(formData: FormData) {

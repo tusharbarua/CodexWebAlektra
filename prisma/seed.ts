@@ -272,6 +272,33 @@ async function main() {
     }
   ];
 
+  await prisma.siteSettings.upsert({
+    where: { singletonKey: "footer" },
+    update: {
+      contactEmail: "contact@alektraepc.com",
+      contactPhone: "+880 1735954 844",
+      address: "Dhaka, Bangladesh",
+      footerDescription:
+        "Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.",
+      copyrightText: "Copyright (c) Alektra Renewable. All rights reserved."
+    },
+    create: {
+      singletonKey: "footer",
+      contactEmail: "contact@alektraepc.com",
+      contactPhone: "+880 1735954 844",
+      address: "Dhaka, Bangladesh",
+      footerDescription:
+        "Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.",
+      copyrightText: "Copyright (c) Alektra Renewable. All rights reserved."
+    }
+  });
+
+  const seededProductImages = [
+    "/uploads/products/seed-solar-module.svg",
+    "/uploads/products/seed-inverter.svg",
+    "/uploads/products/seed-mounting.svg"
+  ];
+
   for (const product of products) {
     const created = await prisma.product.upsert({
       where: { slug: product.slug },
@@ -295,15 +322,15 @@ async function main() {
       }
     });
 
-    await prisma.productImage.upsert({
-      where: { id: `${created.id}-primary` },
-      update: {},
-      create: {
-        id: `${created.id}-primary`,
+    await prisma.productImage.deleteMany({ where: { productId: created.id } });
+    await prisma.productImage.createMany({
+      data: seededProductImages.map((imagePath, index) => ({
         productId: created.id,
-        url: "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80",
-        alt: `${product.name} product image`
-      }
+        imagePath,
+        altText: `${product.name} product image ${index + 1}`,
+        sortOrder: index,
+        isPrimary: index === 0
+      }))
     });
   }
 

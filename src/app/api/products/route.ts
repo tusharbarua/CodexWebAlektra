@@ -22,7 +22,7 @@ export async function GET(request: Request) {
           ]
         : undefined
     },
-    include: { category: true, images: { orderBy: { sortOrder: "asc" } } },
+    include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
     orderBy:
       sort === "price-asc"
         ? { priceBdt: "asc" }

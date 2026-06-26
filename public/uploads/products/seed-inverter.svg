@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Solar inverter product image">
+  <rect width="1200" height="800" fill="#f4faf6"/>
+  <rect x="348" y="120" width="504" height="560" rx="42" fill="#ffffff" stroke="#cfe5d6" stroke-width="10"/>
+  <rect x="414" y="208" width="372" height="112" rx="18" fill="#08211a"/>
+  <path d="M488 470h224" stroke="#118447" stroke-width="28" stroke-linecap="round"/>
+  <path d="M488 540h154" stroke="#8ed957" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="727" cy="515" r="50" fill="#118447"/>
+  <path d="M604 250c34-34 86-34 120 0" fill="none" stroke="#8ed957" stroke-width="16" stroke-linecap="round"/>
+</svg>

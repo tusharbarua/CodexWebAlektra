@@ -21,7 +21,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         { model: { contains: params.q } }
       ] : undefined
     },
-    include: { category: true, images: { orderBy: { sortOrder: "asc" } } },
+    include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
     orderBy: params.sort === "price-asc" ? { priceBdt: "asc" } : params.sort === "price-desc" ? { priceBdt: "desc" } : [{ isFeatured: "desc" }, { createdAt: "desc" }]
   });
   const categories = await prisma.productCategory.findMany({ orderBy: { name: "asc" } });
@@ -47,7 +47,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
           {products.map((product) => <ProductCard key={product.id} product={{
             name: product.name, slug: product.slug, sku: product.sku, category: product.category.name,
             price: Number(product.priceBdt), stock: product.stockQuantity,
-            image: product.images[0]?.url ?? fallbackImage, description: product.shortDescription
+            image: product.images[0]?.imagePath ?? fallbackImage, description: product.shortDescription
           }} />)}
         </div>
         {!products.length ? <div className="panel"><p>No products matched your filters.</p></div> : null}

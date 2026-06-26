@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Solar mounting structure product image">
+  <rect width="1200" height="800" fill="#f7fbf7"/>
+  <path d="M180 560h840" stroke="#0b2a22" stroke-width="28" stroke-linecap="round"/>
+  <path d="M270 560 450 270M560 560 740 270M850 560 1030 270" stroke="#118447" stroke-width="24" stroke-linecap="round"/>
+  <path d="M360 330h520" stroke="#86c45a" stroke-width="32" stroke-linecap="round"/>
+  <path d="M300 430h520" stroke="#1f7a4b" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="450" cy="270" r="24" fill="#071411"/>
+  <circle cx="740" cy="270" r="24" fill="#071411"/>
+</svg>

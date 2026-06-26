@@ -4,8 +4,8 @@ export const brand = {
   name: "Alektra Renewable",
   domain: "www.alektraepc.com",
   logo: officialLogoDataUrl,
-  email: "info@alektraepc.com",
-  phone: "+880 1700-000000",
+  email: "contact@alektraepc.com",
+  phone: "+880 1735954 844",
   address: "Dhaka, Bangladesh"
 };
 

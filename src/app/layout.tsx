@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { getFooterSettings } from "@/lib/site-settings";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,13 +23,14 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const footerSettings = await getFooterSettings();
   return (
     <html lang="en">
       <body suppressHydrationWarning>
         <Header />
         {children}
-        <Footer />
+        <Footer settings={footerSettings} />
       </body>
     </html>
   );

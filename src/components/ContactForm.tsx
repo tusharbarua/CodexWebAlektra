@@ -10,9 +10,10 @@ export function ContactForm() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const formElement = event.currentTarget;
     setStatus("sending");
     setMessage("");
-    const form = new FormData(event.currentTarget);
+    const form = new FormData(formElement);
     const response = await fetch("/api/contact", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -22,7 +23,7 @@ export function ContactForm() {
     if (response.ok) {
       setStatus("sent");
       setMessage("Thank you. Alektra will contact you shortly.");
-      event.currentTarget.reset();
+      formElement.reset();
       startedAt.current = Date.now();
     } else {
       setStatus("error");

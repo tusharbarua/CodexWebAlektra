@@ -24,7 +24,7 @@ export default async function HomePage() {
     prisma.resourceCategory.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.product.findMany({
       where: { status: PublishStatus.PUBLISHED, isFeatured: true },
-      include: { category: true, images: { orderBy: { sortOrder: "asc" } } },
+      include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
       take: 3
     }),
     prisma.siteContent.findMany({ where: { status: PublishStatus.PUBLISHED } })
@@ -175,7 +175,7 @@ export default async function HomePage() {
             {products.map((product) => <ProductCard key={product.id} product={{
               name: product.name, slug: product.slug, sku: product.sku, category: product.category.name,
               price: Number(product.priceBdt), stock: product.stockQuantity,
-              image: product.images[0]?.url ?? fallbackSolar, description: product.shortDescription
+              image: product.images[0]?.imagePath ?? fallbackSolar, description: product.shortDescription
             }} />)}
           </div>
           <p style={{ marginTop: 24 }}><Link className="btn secondary" href="/shop">Browse all products <ArrowRight size={18} /></Link></p>

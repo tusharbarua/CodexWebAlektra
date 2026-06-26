@@ -1,14 +1,21 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { ShoppingCart, UserRound } from "lucide-react";
-import { brand } from "@/data/site";
+import { brandLogos, brandNames, getDivisionFromPath } from "@/lib/brand";
 
 export function Header() {
+  const pathname = usePathname();
+  const division = getDivisionFromPath(pathname);
+  const logo = brandLogos[division];
+  const brandName = brandNames[division];
   return (
-    <header className="site-header">
+    <header className={`site-header ${division}-site-header`}>
       <div className="container nav">
-        <Link className="brand-mark" href="/" aria-label="Alektra Renewable home">
-          <Image src={brand.logo} alt="Alektra Renewable" width={260} height={80} unoptimized priority />
+        <Link className={`brand-mark header-logo-frame brand-mark-${division}`} href="/" aria-label={`${brandName} home`}>
+          <Image className="brand-logo" src={logo} alt={brandName} width={420} height={120} unoptimized priority />
         </Link>
         <nav className="nav-links" aria-label="Primary navigation">
           <Link href="/#epc">EPC</Link>
@@ -23,7 +30,7 @@ export function Header() {
             <UserRound size={18} />
             Account
           </Link>
-          <Link className="btn dark" href="/cart" aria-label="Cart">
+          <Link className="btn dark header-cta" href="/cart" aria-label="Cart">
             <ShoppingCart size={18} />
             Cart
           </Link>

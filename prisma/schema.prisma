@@ -141,6 +141,22 @@ model SiteContent {
   updatedAt DateTime      @updatedAt
 }
 
+model SiteSettings {
+  id                String   @id @default(cuid())
+  singletonKey      String   @unique @default("footer")
+  contactEmail      String   @default("contact@alektraepc.com")
+  contactPhone      String   @default("+880 1735954 844")
+  address           String   @default("Dhaka, Bangladesh")
+  facebookUrl       String?
+  linkedinUrl       String?
+  youtubeUrl        String?
+  whatsappNumber    String?
+  footerDescription String   @default("Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.")
+  copyrightText     String   @default("Copyright (c) Alektra Renewable. All rights reserved.")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model HeroMedia {
   id          String        @id @default(cuid())
   title       String
@@ -290,12 +306,15 @@ model Product {
 }
 
 model ProductImage {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   productId String
-  url       String
-  alt       String
-  sortOrder Int     @default(0)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imagePath String
+  altText   String
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Coupon {

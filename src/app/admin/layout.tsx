@@ -18,6 +18,7 @@ const links = [
   ["Coupons", "/admin/coupons"],
   ["Contacts", "/admin/contacts"],
   ["SEO", "/admin/seo"],
+  ["Footer settings", "/admin/site-settings/footer"],
   ["Users & roles", "/admin/users"]
 ];
 
