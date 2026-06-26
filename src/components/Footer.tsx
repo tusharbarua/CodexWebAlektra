@@ -1,12 +1,20 @@
+"use client";
+
 import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { brand } from "@/data/site";
 
 export function Footer() {
+  const pathname = usePathname();
+  const thermal = pathname.startsWith("/thermal");
   return (
-    <footer className="site-footer">
+    <footer className={`site-footer ${thermal ? "thermal-footer" : ""}`}>
       <div className="container footer-grid">
         <div>
-          <img src={brand.logo} alt="Alektra Renewable" style={{ width: 260, filter: "brightness(0) invert(1)" }} />
+          <span style={{ display: "inline-block", background: "#fff", borderRadius: 8, padding: 10 }}>
+            <Image src={brand.logo} alt="Alektra Renewable" width={260} height={80} unoptimized />
+          </span>
           <p>Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.</p>
         </div>
         <div>
@@ -14,7 +22,7 @@ export function Footer() {
           <p>
             <Link href="/#epc">Alektra EPC</Link>
             <br />
-            <Link href="/#subdivisions">Alektra Thermal</Link>
+            <Link href="/thermal">Alektra Thermal</Link>
             <br />
             <Link href="/#subdivisions">Alektra Sparkle</Link>
             <br />

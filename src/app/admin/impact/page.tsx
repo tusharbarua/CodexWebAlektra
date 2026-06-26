@@ -1,40 +1,20 @@
+import { saveImpact } from "@/app/admin/actions";
 import { prisma } from "@/lib/prisma";
-import { numberFormat } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminImpactPage() {
-  const snapshot = await prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "desc" } }).catch(() => null);
-  const ledgerCount = await prisma.impactDailyLedger.count().catch(() => 0);
-
-  return (
-    <div>
-      <p className="kicker">Impact</p>
-      <h1>Impact dashboard values.</h1>
-      <div className="panel">
-        <p>
-          Manual baselines are stored in <code>ImpactSnapshot.manualBaselineJson.baseline</code>. API readings from
-          inverter platforms append to <code>ImpactDailyLedger</code> and are added to the baseline during recalculation.
-        </p>
-      </div>
-      {snapshot ? (
-        <div className="impact-grid" style={{ marginTop: 24 }}>
-          {[
-            ["Plants", snapshot.plantsInOperation],
-            ["Capacity kW", Number(snapshot.totalInstalledCapacityKw)],
-            ["kWh", Number(snapshot.kwhGenerated)],
-            ["Trees", Number(snapshot.equivalentTreesPlanted)],
-            ["CO2 tons", Number(snapshot.co2OffsetTons)],
-            ["Flights", Number(snapshot.longHaulFlightsAvoided)]
-          ].map(([label, value]) => (
-            <div className="metric" style={{ color: "var(--ink)", background: "#fff", borderColor: "var(--line)" }} key={label}>
-              <strong>{numberFormat(Number(value))}</strong>
-              <span style={{ color: "var(--muted)" }}>{label}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <p style={{ marginTop: 18 }}>Ledger rows: {ledgerCount}</p>
-    </div>
-  );
+  const row = await prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "desc" } });
+  return <div><p className="kicker">Impact</p><h1>Impact dashboard values.</h1>
+    <form action={saveImpact} className="panel admin-form">
+      <Field name="plantsInOperation" label="Plants in operation" value={row?.plantsInOperation} />
+      <Field name="totalInstalledCapacityKw" label="Total installed capacity (kW)" value={Number(row?.totalInstalledCapacityKw ?? 0)} />
+      <Field name="kwhGenerated" label="kWh generated" value={Number(row?.kwhGenerated ?? 0)} />
+      <Field name="equivalentTreesPlanted" label="Equivalent trees planted" value={Number(row?.equivalentTreesPlanted ?? 0)} />
+      <Field name="co2OffsetTons" label="CO2 offset (tons)" value={Number(row?.co2OffsetTons ?? 0)} step="0.01" />
+      <Field name="longHaulFlightsAvoided" label="Long-haul flights avoided" value={Number(row?.longHaulFlightsAvoided ?? 0)} />
+      <button className="btn">Update impact values</button>
+    </form>
+  </div>;
 }
+function Field({ name, label, value, step = "1" }: { name: string; label: string; value?: number; step?: string }) { return <label className="field"><span>{label}</span><input name={name} type="number" min="0" step={step} defaultValue={value ?? 0} required /></label>; }

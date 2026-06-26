@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { PaymentMethod, PaymentStatus } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { initiateSslCommerz } from "@/lib/sslcommerz";
+import { initiateSslCommerz, sslCommerzEnabled } from "@/lib/sslcommerz";
 import { sendOrderConfirmation } from "@/lib/mail";
 
 const checkoutSchema = z.object({
@@ -23,6 +23,10 @@ const checkoutSchema = z.object({
 export async function POST(request: Request) {
   try {
     const body = checkoutSchema.parse(await request.json());
+    if (body.paymentMethod === PaymentMethod.SSLCOMMERZ && !sslCommerzEnabled()) {
+      throw new Error("SSLCommerz credentials are not configured. Please choose cash on delivery.");
+    }
+
     const productIdentifiers = body.items.map((item) => item.productId);
     const products = await prisma.product.findMany({
       where: { OR: [{ id: { in: productIdentifiers } }, { slug: { in: productIdentifiers } }, { sku: { in: productIdentifiers } }] }
@@ -36,13 +40,29 @@ export async function POST(request: Request) {
   }, 0);
 
   const coupon = body.couponCode
-    ? await prisma.coupon.findFirst({ where: { code: body.couponCode, isActive: true } })
+    ? await prisma.coupon.findUnique({ where: { code: body.couponCode.trim().toUpperCase() } })
     : null;
-  const discount = coupon
+  if (body.couponCode) {
+    const now = new Date();
+    if (
+      !coupon ||
+      !coupon.isActive ||
+      (coupon.startsAt && coupon.startsAt > now) ||
+      (coupon.expiresAt && coupon.expiresAt < now) ||
+      (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit)
+    ) {
+      throw new Error("Coupon is invalid or no longer available.");
+    }
+    if (coupon.minimumSpend && subtotal < Number(coupon.minimumSpend)) {
+      throw new Error(`Coupon requires a minimum spend of BDT ${Number(coupon.minimumSpend).toLocaleString("en-BD")}.`);
+    }
+  }
+  const calculatedDiscount = coupon
     ? coupon.discountType === "PERCENT"
       ? subtotal * (Number(coupon.amount) / 100)
       : Number(coupon.amount)
     : 0;
+  const discount = Math.min(calculatedDiscount, subtotal);
   const delivery = await prisma.deliveryCharge.findFirst({ where: { zone: body.address.zone, isActive: true } });
   const deliveryCharge =
     delivery && (!delivery.freeAboveBdt || subtotal - discount < Number(delivery.freeAboveBdt))
@@ -109,7 +129,7 @@ export async function POST(request: Request) {
       transactionId: payment.transactionId,
       amountBdt: order.totalBdt,
       status: PaymentStatus.INITIATED,
-      requestPayload: payment.payload
+      requestPayload: payment.payload as Prisma.InputJsonObject
     }
   });
 

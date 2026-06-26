@@ -1,3 +1,31 @@
-export default function AdminProjectsPage() {
-  return <div><p className="kicker">Admin</p><h1>Projects.</h1><div className="panel"><p>Projects include client, location, type, capacity, commissioning date, cover image, summary, generation and savings.</p></div></div>;
+import { deleteProject, saveProject } from "@/app/admin/actions";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminProjectsPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  const { edit } = await searchParams;
+  const [projects, current] = await Promise.all([
+    prisma.project.findMany({ orderBy: { updatedAt: "desc" } }),
+    edit ? prisma.project.findUnique({ where: { id: edit } }) : null
+  ]);
+  const imageUrls = Array.isArray(current?.imageUrls) ? current.imageUrls.map(String).join("\n") : "";
+  return <div><p className="kicker">Projects</p><h1>{current ? "Edit completed project" : "Completed project management"}</h1>
+    <form action={saveProject} className="panel admin-form">
+      <input type="hidden" name="id" value={current?.id ?? ""} />
+      <Field name="title" label="Project name" value={current?.title} /><Field name="slug" label="Slug" value={current?.slug} />
+      <Field name="clientName" label="Client name" value={current?.clientName} optional /><Field name="location" label="Location" value={current?.location} />
+      <Field name="projectType" label="Project type" value={current?.projectType} /><Field name="capacityKw" label="Capacity (kW)" type="number" value={current ? Number(current.capacityKw) : undefined} />
+      <Field name="inverterBrandModel" label="Inverter brand/model" value={current?.inverterBrandModel} optional /><Field name="moduleBrandModel" label="Module brand/model" value={current?.moduleBrandModel} optional />
+      <Field name="commissionedAt" label="Commissioning date" type="date" value={current?.commissionedAt?.toISOString().slice(0, 10)} optional />
+      <Field name="coverImage" label="Cover image URL" value={current?.coverImage} optional /><Field name="videoUrl" label="Video URL" value={current?.videoUrl} optional />
+      <Area name="imageUrls" label="Additional image URLs (one per line)" value={imageUrls} optional /><Area name="summary" label="Short description" value={current?.summary} />
+      <Area name="fullCaseStudy" label="Full case study" value={current?.fullCaseStudy} rows={8} />
+      <label className="field"><span>Status</span><select name="status" defaultValue={current?.status ?? "DRAFT"}><option>DRAFT</option><option>PUBLISHED</option><option>UNPUBLISHED</option></select></label>
+      <div className="admin-form-actions"><button className="btn">{current ? "Save changes" : "Add project"}</button>{current ? <a className="btn secondary" href="/admin/projects">Cancel</a> : null}</div>
+    </form>
+    <table className="table"><thead><tr><th>Project</th><th>Location</th><th>Capacity</th><th>Status</th><th>Actions</th></tr></thead><tbody>{projects.map((project) => <tr key={project.id}><td>{project.title}</td><td>{project.location}</td><td>{Number(project.capacityKw)} kW</td><td>{project.status}</td><td className="table-actions"><a className="btn secondary compact" href={`/admin/projects?edit=${project.id}`}>Edit</a><form action={deleteProject}><input type="hidden" name="id" value={project.id} /><button className="btn danger compact">Delete</button></form></td></tr>)}</tbody></table>
+  </div>;
 }
+function Field({ name, label, value, type = "text", optional = false }: { name: string; label: string; value?: string | number | null; type?: string; optional?: boolean }) { return <label className="field"><span>{label}</span><input name={name} type={type} defaultValue={value ?? ""} required={!optional} /></label>; }
+function Area({ name, label, value, rows = 4, optional = false }: { name: string; label: string; value?: string | null; rows?: number; optional?: boolean }) { return <label className="field wide"><span>{label}</span><textarea name={name} rows={rows} defaultValue={value ?? ""} required={!optional} /></label>; }

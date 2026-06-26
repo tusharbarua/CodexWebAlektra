@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -52,6 +52,22 @@ enum IntegrationProvider {
   GENERIC
 }
 
+enum ThermalInspectionType {
+  STANDARD
+  COMPREHENSIVE
+}
+
+enum ThermalRequestStatus {
+  NEW
+  REVIEWED
+  QUOTED
+  AWAITING_PAYMENT
+  PAID
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -75,12 +91,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -108,7 +124,7 @@ model SeoMetadata {
   route       String   @unique
   title       String
   description String
-  keywords    String[]
+  keywords    Json
   ogImage     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -118,7 +134,7 @@ model SiteContent {
   id        String        @id @default(cuid())
   key       String        @unique
   title     String
-  body      String        @db.Text
+  body      String
   status    PublishStatus @default(PUBLISHED)
   metadata  Json?
   createdAt DateTime      @default(now())
@@ -145,12 +161,17 @@ model Project {
   clientName        String?
   location          String
   projectType       String
-  capacityKw        Decimal       @db.Decimal(10, 2)
+  capacityKw        Decimal
   commissionedAt    DateTime?
   coverImage        String?
-  summary           String        @db.Text
-  annualGeneration  Decimal?      @db.Decimal(14, 2)
-  annualSavingsBdt  Decimal?      @db.Decimal(14, 2)
+  summary           String
+  fullCaseStudy     String        @default("")
+  inverterBrandModel String?
+  moduleBrandModel  String?
+  imageUrls         Json?
+  videoUrl          String?
+  annualGeneration  Decimal?
+  annualSavingsBdt  Decimal?
   status            PublishStatus @default(PUBLISHED)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
@@ -159,11 +180,11 @@ model Project {
 model ImpactSnapshot {
   id                       String   @id @default(cuid())
   plantsInOperation        Int
-  totalInstalledCapacityKw Decimal  @db.Decimal(14, 2)
-  kwhGenerated             Decimal  @db.Decimal(18, 2)
-  equivalentTreesPlanted   Decimal  @db.Decimal(18, 2)
-  co2OffsetTons            Decimal  @db.Decimal(18, 2)
-  longHaulFlightsAvoided   Decimal  @db.Decimal(18, 2)
+  totalInstalledCapacityKw Decimal
+  kwhGenerated             Decimal
+  equivalentTreesPlanted   Decimal
+  co2OffsetTons            Decimal
+  longHaulFlightsAvoided   Decimal
   manualBaselineJson       Json
   lastCalculatedAt         DateTime @default(now())
   createdAt                DateTime @default(now())
@@ -176,10 +197,10 @@ model ImpactDailyLedger {
   provider        IntegrationProvider?
   externalPlantId String?
   date            DateTime
-  kwhGenerated    Decimal             @db.Decimal(18, 2)
-  co2OffsetTons   Decimal             @db.Decimal(18, 2)
-  treesEquivalent Decimal             @db.Decimal(18, 2)
-  flightsAvoided  Decimal             @db.Decimal(18, 2)
+  kwhGenerated    Decimal
+  co2OffsetTons   Decimal
+  treesEquivalent Decimal
+  flightsAvoided  Decimal
   rawPayload      Json?
   createdAt       DateTime            @default(now())
 
@@ -191,10 +212,10 @@ model MonitoringIntegration {
   provider     IntegrationProvider
   label        String
   baseUrl      String?
-  apiKey       String?             @db.Text
-  apiSecret    String?             @db.Text
+  apiKey       String?
+  apiSecret    String?
   username     String?
-  password     String?             @db.Text
+  password     String?
   isEnabled    Boolean             @default(false)
   lastSyncAt   DateTime?
   settings     Json?
@@ -216,7 +237,7 @@ model ResourceArticle {
   title        String
   slug         String           @unique
   excerpt      String
-  body         String           @db.Text
+  body         String
   coverImage   String?
   status       PublishStatus    @default(DRAFT)
   categoryId   String
@@ -250,13 +271,13 @@ model Product {
   sku                  String          @unique
   model                String
   brand                String
-  priceBdt             Decimal         @db.Decimal(14, 2)
-  compareAtPriceBdt    Decimal?        @db.Decimal(14, 2)
+  priceBdt             Decimal
+  compareAtPriceBdt    Decimal?
   stockQuantity        Int
   isFeatured           Boolean         @default(false)
   status               PublishStatus   @default(DRAFT)
   shortDescription     String
-  technicalDescription String          @db.Text
+  technicalDescription String
   datasheetUrl         String?
   manualUrl            String?
   specifications       Json
@@ -282,8 +303,8 @@ model Coupon {
   code           String    @unique
   description    String?
   discountType   String
-  amount         Decimal   @db.Decimal(10, 2)
-  minimumSpend   Decimal?  @db.Decimal(14, 2)
+  amount         Decimal
+  minimumSpend   Decimal?
   startsAt       DateTime?
   expiresAt      DateTime?
   usageLimit     Int?
@@ -296,8 +317,8 @@ model DeliveryCharge {
   id          String   @id @default(cuid())
   zone        String   @unique
   description String?
-  chargeBdt   Decimal  @db.Decimal(10, 2)
-  freeAboveBdt Decimal? @db.Decimal(14, 2)
+  chargeBdt   Decimal
+  freeAboveBdt Decimal?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -312,10 +333,10 @@ model Order {
   customerPhone   String
   billingAddress  Json
   shippingAddress Json
-  subtotalBdt     Decimal       @db.Decimal(14, 2)
-  discountBdt     Decimal       @db.Decimal(14, 2) @default(0)
-  deliveryBdt     Decimal       @db.Decimal(14, 2) @default(0)
-  totalBdt        Decimal       @db.Decimal(14, 2)
+  subtotalBdt     Decimal
+  discountBdt     Decimal       @default(0)
+  deliveryBdt     Decimal       @default(0)
+  totalBdt        Decimal
   status          OrderStatus   @default(PENDING)
   paymentMethod   PaymentMethod
   paymentStatus   PaymentStatus @default(UNPAID)
@@ -336,8 +357,8 @@ model OrderItem {
   name           String
   sku            String
   quantity       Int
-  unitPriceBdt   Decimal @db.Decimal(14, 2)
-  lineTotalBdt   Decimal @db.Decimal(14, 2)
+  unitPriceBdt   Decimal
+  lineTotalBdt   Decimal
   order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product        Product @relation(fields: [productId], references: [id])
 }
@@ -348,7 +369,7 @@ model PaymentTransaction {
   provider        String
   transactionId   String?       @unique
   validationId    String?
-  amountBdt       Decimal       @db.Decimal(14, 2)
+  amountBdt       Decimal
   status          PaymentStatus
   requestPayload  Json?
   responsePayload Json?
@@ -364,7 +385,49 @@ model ContactSubmission {
   phone     String?
   company   String?
   interest  String
-  message   String   @db.Text
+  message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model ThermalInspectionRequest {
+  id                    String                @id @default(cuid())
+  requestNumber         String                @unique
+  inspectionType        ThermalInspectionType
+  moduleDetails         Json
+  pvCapacityKwp         Decimal
+  acCapacityKw          Decimal
+  projectLocation       String
+  latitude              Decimal?
+  longitude             Decimal?
+  institutionName       String
+  address               String
+  email                 String
+  contactNumber         String
+  additionalNotes       String?
+  internalNotes         String?
+  askForPayment         Boolean               @default(false)
+  calculatedFeeBdt      Decimal?
+  paymentStatus         PaymentStatus         @default(UNPAID)
+  sslTransactionId      String?
+  pdfFilePath           String?
+  emailSentAt           DateTime?
+  adminEmailSentAt      DateTime?
+  status                ThermalRequestStatus  @default(NEW)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+}
+
+model ThermalPricingRule {
+  id                      String   @id @default(cuid())
+  name                    String   @unique
+  baseInspectionFeeBdt    Decimal  @default(0)
+  ratePerKwpBdt           Decimal  @default(0)
+  distanceChargePerKmBdt  Decimal  @default(0)
+  minimumInspectionFeeBdt Decimal  @default(0)
+  standardMultiplier      Decimal  @default(1)
+  comprehensiveMultiplier Decimal  @default(1.5)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 }

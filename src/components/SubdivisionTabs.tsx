@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { ArrowUpRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { subdivisions } from "@/data/site";
 
 export function SubdivisionTabs() {
   const [active, setActive] = useState(subdivisions[0]);
+  const router = useRouter();
 
   return (
     <div className="tabs">
@@ -14,7 +16,7 @@ export function SubdivisionTabs() {
           <button
             className={`tab-button ${active.key === item.key ? "active" : ""}`}
             key={item.key}
-            onClick={() => setActive(item)}
+            onClick={() => item.key === "thermal" ? router.push("/thermal") : setActive(item)}
             role="tab"
             aria-selected={active.key === item.key}
           >

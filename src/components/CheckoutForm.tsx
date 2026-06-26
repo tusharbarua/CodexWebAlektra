@@ -88,8 +88,8 @@ export function CheckoutForm() {
         <div className="field wide">
           <label htmlFor="paymentMethod">Payment</label>
           <select id="paymentMethod" name="paymentMethod">
-            <option value="SSLCOMMERZ">SSLCommerz</option>
             <option value="CASH_ON_DELIVERY">Cash on delivery</option>
+            <option value="SSLCOMMERZ">SSLCommerz</option>
           </select>
         </div>
         <button className="btn wide" type="submit" disabled={!items.length}>

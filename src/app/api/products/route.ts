@@ -16,9 +16,9 @@ export async function GET(request: Request) {
       category: category ? { slug: category } : undefined,
       OR: q
         ? [
-            { name: { contains: q, mode: "insensitive" } },
-            { sku: { contains: q, mode: "insensitive" } },
-            { model: { contains: q, mode: "insensitive" } }
+            { name: { contains: q } },
+            { sku: { contains: q } },
+            { model: { contains: q } }
           ]
         : undefined
     },

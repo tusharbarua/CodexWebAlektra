@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { Order } from "@prisma/client";
+import type { Order, ThermalInspectionRequest } from "@prisma/client";
 
 export async function sendOrderConfirmation(order: Order) {
   if (!process.env.SMTP_HOST) return { skipped: true };
@@ -22,4 +22,83 @@ export async function sendOrderConfirmation(order: Order) {
   });
 
   return { skipped: false };
+}
+
+export async function sendThermalRequestEmails(request: ThermalInspectionRequest, pdfBytes: Uint8Array) {
+  if (!process.env.SMTP_HOST) return { clientSent: false, adminSent: false };
+  const transporter = createTransport();
+  const summary = `Request ${request.requestNumber}\nInspection: ${request.inspectionType}\nInstitution: ${request.institutionName}\nPV capacity: ${request.pvCapacityKwp} kWp\nAC capacity: ${request.acCapacityKw} kW\nLocation: ${request.projectLocation}`;
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: request.email,
+    subject: `Alektra Thermal request ${request.requestNumber}`,
+    text: `Thank you for your thermal inspection request.\n\n${summary}\n\nOur team will review the request and contact you shortly.`,
+    attachments: [{ filename: `${request.requestNumber}.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  const adminTo = process.env.ADMIN_NOTIFICATION_EMAIL ?? process.env.ADMIN_EMAIL;
+  if (adminTo) await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: adminTo,
+    subject: `New thermal inspection request ${request.requestNumber}`,
+    text: summary,
+    attachments: [{ filename: `${request.requestNumber}.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  return { clientSent: true, adminSent: Boolean(adminTo) };
+}
+
+export async function sendThermalPaymentRequestEmail(request: ThermalInspectionRequest, pdfBytes: Uint8Array) {
+  if (!process.env.SMTP_HOST || !request.calculatedFeeBdt) return { clientSent: false, adminSent: false };
+  const transporter = createTransport();
+  const origin = process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "https://www.alektraepc.com";
+  const requestUrl = `${origin.replace(/\/$/, "")}/thermal/inspection-request/success?request=${encodeURIComponent(request.requestNumber)}`;
+  const fee = Number(request.calculatedFeeBdt).toLocaleString("en-BD");
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: request.email,
+    subject: `Payment requested for ${request.requestNumber}`,
+    text: `Your Alektra Thermal inspection request has been reviewed.\n\nInspection fee: BDT ${fee}\nRequest: ${request.requestNumber}\n\nReview the quotation and pay securely when ready: ${requestUrl}`,
+    html: `<p>Your Alektra Thermal inspection request <strong>${request.requestNumber}</strong> has been reviewed.</p><p>Inspection fee: <strong>BDT ${fee}</strong></p><p><a href="${requestUrl}">Review request and pay securely</a></p>`,
+    attachments: [{ filename: `${request.requestNumber}-quotation.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  const adminTo = process.env.ADMIN_NOTIFICATION_EMAIL ?? process.env.ADMIN_EMAIL;
+  if (adminTo) await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: adminTo,
+    subject: `Payment request issued for ${request.requestNumber}`,
+    text: `A payment request for BDT ${fee} was issued to ${request.email}.`,
+    attachments: [{ filename: `${request.requestNumber}-quotation.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  return { clientSent: true, adminSent: Boolean(adminTo) };
+}
+
+export async function sendThermalPaymentConfirmationEmail(request: ThermalInspectionRequest, pdfBytes: Uint8Array) {
+  if (!process.env.SMTP_HOST || !request.calculatedFeeBdt) return { clientSent: false, adminSent: false };
+  const transporter = createTransport();
+  const fee = Number(request.calculatedFeeBdt).toLocaleString("en-BD");
+  const transaction = request.sslTransactionId ? ` Transaction reference: ${request.sslTransactionId}.` : "";
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: request.email,
+    subject: `Payment received for ${request.requestNumber}`,
+    text: `We have received BDT ${fee} for request ${request.requestNumber}.${transaction} Our team will contact you to arrange the inspection.`,
+    attachments: [{ filename: `${request.requestNumber}-payment-receipt.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  const adminTo = process.env.ADMIN_NOTIFICATION_EMAIL ?? process.env.ADMIN_EMAIL;
+  if (adminTo) await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
+    to: adminTo,
+    subject: `Thermal inspection payment received: ${request.requestNumber}`,
+    text: `Payment of BDT ${fee} has been recorded for ${request.requestNumber}.${transaction}`,
+    attachments: [{ filename: `${request.requestNumber}-payment-receipt.pdf`, content: Buffer.from(pdfBytes) }]
+  });
+  return { clientSent: true, adminSent: Boolean(adminTo) };
+}
+
+function createTransport() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: Number(process.env.SMTP_PORT ?? 587) === 465,
+    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } : undefined
+  });
 }

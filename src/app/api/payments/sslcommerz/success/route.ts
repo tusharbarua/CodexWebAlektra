@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OrderStatus, PaymentStatus } from "@prisma/client";
+import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { validateSslCommerz } from "@/lib/sslcommerz";
 import { sendOrderConfirmation } from "@/lib/mail";
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     data: {
       validationId: valId,
       status: PaymentStatus.PAID,
-      responsePayload: validation
+      responsePayload: validation as Prisma.InputJsonObject
     },
     include: { order: true }
   });

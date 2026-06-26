@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ShoppingCart, UserRound } from "lucide-react";
 import { brand } from "@/data/site";
 
@@ -7,13 +8,13 @@ export function Header() {
     <header className="site-header">
       <div className="container nav">
         <Link className="brand-mark" href="/" aria-label="Alektra Renewable home">
-          <img src={brand.logo} alt="Alektra Renewable" />
+          <Image src={brand.logo} alt="Alektra Renewable" width={260} height={80} unoptimized priority />
         </Link>
         <nav className="nav-links" aria-label="Primary navigation">
-          <a href="/#epc">EPC</a>
-          <a href="/#subdivisions">Thermal</a>
-          <a href="/#subdivisions">Sparkle</a>
-          <a href="/#subdivisions">Mapping</a>
+          <Link href="/#epc">EPC</Link>
+          <Link href="/thermal">Thermal</Link>
+          <Link href="/#subdivisions">Sparkle</Link>
+          <Link href="/#subdivisions">Mapping</Link>
           <Link href="/resources">Resources</Link>
           <Link href="/shop">Shop</Link>
         </nav>

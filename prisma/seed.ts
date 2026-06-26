@@ -65,8 +65,8 @@ async function main() {
     }
   });
 
-  await prisma.impactSnapshot.create({
-    data: {
+  const existingImpact = await prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "asc" } });
+  const impactData = {
       plantsInOperation: 13,
       totalInstalledCapacityKw: 1240,
       kwhGenerated: 289569,
@@ -83,8 +83,9 @@ async function main() {
           longHaulFlightsAvoided: 4172
         }
       }
-    }
-  });
+    };
+  if (existingImpact) await prisma.impactSnapshot.update({ where: { id: existingImpact.id }, data: impactData });
+  else await prisma.impactSnapshot.create({ data: impactData });
 
   const projects = [
     {
@@ -323,6 +324,20 @@ async function main() {
     where: { zone: "Dhaka Metro" },
     update: {},
     create: { zone: "Dhaka Metro", description: "Standard delivery inside Dhaka", chargeBdt: 300, freeAboveBdt: 100000 }
+  });
+
+  await prisma.thermalPricingRule.upsert({
+    where: { name: "Default" },
+    update: {},
+    create: {
+      name: "Default",
+      baseInspectionFeeBdt: 25000,
+      ratePerKwpBdt: 45,
+      distanceChargePerKmBdt: 0,
+      minimumInspectionFeeBdt: 35000,
+      standardMultiplier: 1,
+      comprehensiveMultiplier: 1.6
+    }
   });
 
   await prisma.deliveryCharge.upsert({

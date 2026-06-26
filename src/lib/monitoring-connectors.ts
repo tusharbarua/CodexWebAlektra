@@ -1,11 +1,11 @@
-import { IntegrationProvider, type MonitoringIntegration } from "@prisma/client";
+import { IntegrationProvider, Prisma, type MonitoringIntegration } from "@prisma/client";
 import { appendDailyProduction } from "@/lib/impact";
 
 export type ProductionReading = {
   externalPlantId: string;
   date: Date;
   kwhGenerated: number;
-  rawPayload: Record<string, unknown>;
+  rawPayload: Prisma.InputJsonValue;
 };
 
 export interface MonitoringConnector {

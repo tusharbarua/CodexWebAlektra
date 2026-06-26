@@ -1,7 +1,9 @@
+import { officialLogoDataUrl } from "@/data/official-logo";
+
 export const brand = {
   name: "Alektra Renewable",
   domain: "www.alektraepc.com",
-  logo: "/brand/alektra-logo.svg",
+  logo: officialLogoDataUrl,
   email: "info@alektraepc.com",
   phone: "+880 1700-000000",
   address: "Dhaka, Bangladesh"
@@ -65,7 +67,7 @@ export const whyChoose = [
   "Single partner for design, procurement, installation, commissioning and aftercare.",
   "Thermal inspection, cleaning and mapping subdivisions keep assets performing after handover.",
   "Net metering and monitoring support built into the project workflow.",
-  "Impact accounting that protects manual baselines while adding future API production data."
+  "Clear performance reporting that turns solar output into understandable business and environmental results."
 ];
 
 export const projects = [

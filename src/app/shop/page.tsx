@@ -1,57 +1,59 @@
 import type { Metadata } from "next";
+import { PublishStatus } from "@prisma/client";
 import { ProductCard } from "@/components/ProductCard";
-import { products } from "@/data/site";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Solar Shop",
   description: "Solar modules, inverters, mounting and monitoring products from Alektra Renewable."
 };
+export const dynamic = "force-dynamic";
 
-export default async function ShopPage({
-  searchParams
-}: {
-  searchParams: Promise<{ q?: string; category?: string; sort?: string }>;
-}) {
+export default async function ShopPage({ searchParams }: { searchParams: Promise<{ q?: string; category?: string; sort?: string }> }) {
   const params = await searchParams;
-  const q = (params.q ?? "").toLowerCase();
-  const category = params.category ?? "All";
-  const sorted = [...products]
-    .filter((product) => (category === "All" ? true : product.category === category))
-    .filter((product) => (q ? `${product.name} ${product.sku} ${product.model}`.toLowerCase().includes(q) : true))
-    .sort((a, b) =>
-      params.sort === "price-asc" ? a.price - b.price : params.sort === "price-desc" ? b.price - a.price : Number(b.featured) - Number(a.featured)
-    );
-  const categories = ["All", ...Array.from(new Set(products.map((product) => product.category)))];
+  const products = await prisma.product.findMany({
+    where: {
+      status: PublishStatus.PUBLISHED,
+      category: params.category ? { slug: params.category } : undefined,
+      OR: params.q ? [
+        { name: { contains: params.q } },
+        { sku: { contains: params.q } },
+        { model: { contains: params.q } }
+      ] : undefined
+    },
+    include: { category: true, images: { orderBy: { sortOrder: "asc" } } },
+    orderBy: params.sort === "price-asc" ? { priceBdt: "asc" } : params.sort === "price-desc" ? { priceBdt: "desc" } : [{ isFeatured: "desc" }, { createdAt: "desc" }]
+  });
+  const categories = await prisma.productCategory.findMany({ orderBy: { name: "asc" } });
 
   return (
     <main className="page-shell">
       <div className="container">
         <div className="toolbar">
-          <div>
-            <p className="kicker">Alektra Shop</p>
-            <h1>Solar products and technical accessories.</h1>
-          </div>
+          <div><p className="kicker">Alektra Shop</p><h1>Solar products and technical accessories.</h1></div>
           <form className="nav-actions">
-            <input name="q" placeholder="Search SKU, model or product" defaultValue={params.q} style={{ minHeight: 44, borderRadius: 999, border: "1px solid var(--line)", padding: "0 14px" }} />
-            <select name="category" defaultValue={category} style={{ minHeight: 44, borderRadius: 999, border: "1px solid var(--line)", padding: "0 14px" }}>
-              {categories.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
+            <input name="q" placeholder="Search SKU, model or product" defaultValue={params.q} className="toolbar-input" />
+            <select name="category" defaultValue={params.category ?? ""} className="toolbar-input">
+              <option value="">All categories</option>
+              {categories.map((item) => <option value={item.slug} key={item.id}>{item.name}</option>)}
             </select>
-            <select name="sort" defaultValue={params.sort ?? "featured"} style={{ minHeight: 44, borderRadius: 999, border: "1px solid var(--line)", padding: "0 14px" }}>
-              <option value="featured">Featured</option>
-              <option value="price-asc">Price low to high</option>
-              <option value="price-desc">Price high to low</option>
+            <select name="sort" defaultValue={params.sort ?? "featured"} className="toolbar-input">
+              <option value="featured">Featured</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option>
             </select>
             <button className="btn" type="submit">Filter</button>
           </form>
         </div>
         <div className="shop-grid">
-          {sorted.map((product) => (
-            <ProductCard product={product} key={product.slug} />
-          ))}
+          {products.map((product) => <ProductCard key={product.id} product={{
+            name: product.name, slug: product.slug, sku: product.sku, category: product.category.name,
+            price: Number(product.priceBdt), stock: product.stockQuantity,
+            image: product.images[0]?.url ?? fallbackImage, description: product.shortDescription
+          }} />)}
         </div>
+        {!products.length ? <div className="panel"><p>No products matched your filters.</p></div> : null}
       </div>
     </main>
   );
 }
+
+const fallbackImage = "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80";

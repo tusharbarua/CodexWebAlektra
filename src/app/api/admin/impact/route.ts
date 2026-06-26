@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function PUT(request: Request) {
   const session = await auth();
-  if (!isAdminRole(session?.user.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const user = session?.user;
+  if (!user || !isAdminRole(user.role)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
   const latest = await prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "desc" } });
@@ -17,7 +18,7 @@ export async function PUT(request: Request) {
     longHaulFlightsAvoided: body.longHaulFlightsAvoided,
     manualBaselineJson: {
       source: "Admin manual baseline update",
-      updatedBy: session.user.email,
+      updatedBy: user.email,
       updatedAt: new Date().toISOString(),
       baseline: {
         kwhGenerated: body.kwhGenerated,

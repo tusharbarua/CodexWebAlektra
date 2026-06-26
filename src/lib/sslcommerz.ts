@@ -63,3 +63,41 @@ export async function validateSslCommerz(valId: string) {
   const response = await fetch(url);
   return response.json() as Promise<Record<string, unknown>>;
 }
+
+export async function initiateThermalPayment(input: {
+  requestNumber: string;
+  amountBdt: number;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  address: string;
+}) {
+  if (!sslCommerzEnabled()) throw new Error("SSLCommerz credentials are not configured.");
+  const transactionId = `${input.requestNumber}-${crypto.randomUUID().slice(0, 8)}`;
+  const origin = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
+  const body = new URLSearchParams({
+    store_id: process.env.SSLCOMMERZ_STORE_ID!,
+    store_passwd: process.env.SSLCOMMERZ_STORE_PASSWORD!,
+    total_amount: String(input.amountBdt),
+    currency: "BDT",
+    tran_id: transactionId,
+    success_url: `${origin}/api/thermal-payments/success`,
+    fail_url: `${origin}/thermal/inspection-request/success?request=${input.requestNumber}`,
+    cancel_url: `${origin}/thermal/inspection-request/success?request=${input.requestNumber}`,
+    cus_name: input.customerName,
+    cus_email: input.customerEmail,
+    cus_phone: input.customerPhone,
+    cus_add1: input.address,
+    cus_city: "Bangladesh",
+    cus_country: "Bangladesh",
+    shipping_method: "NO",
+    product_name: `Alektra Thermal inspection ${input.requestNumber}`,
+    product_category: "Thermal Inspection",
+    product_profile: "non-physical-goods"
+  });
+  const endpoint = process.env.SSLCOMMERZ_SANDBOX === "false" ? liveUrl : sandboxUrl;
+  const response = await fetch(endpoint, { method: "POST", body });
+  const payload = (await response.json()) as { GatewayPageURL?: string; failedreason?: string };
+  if (!payload.GatewayPageURL) throw new Error(payload.failedreason || "SSLCommerz initiation failed.");
+  return { transactionId, redirectUrl: payload.GatewayPageURL };
+}

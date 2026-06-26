@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/format";
+import { updateOrderStatus } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function AdminOrdersPage() {
               <td>{order.customerName}<br /><small>{order.customerEmail}</small></td>
               <td>{money(Number(order.totalBdt))}</td>
               <td>{order.paymentMethod} · {order.paymentStatus}</td>
-              <td>{order.status}</td>
+              <td><form action={updateOrderStatus} className="inline-form"><input type="hidden" name="id" value={order.id}/><select name="status" defaultValue={order.status}><option>PENDING</option><option>CONFIRMED</option><option>PROCESSING</option><option>SHIPPED</option><option>COMPLETED</option><option>CANCELLED</option><option>REFUNDED</option></select><button className="btn compact">Save</button></form></td>
             </tr>
           ))}
         </tbody>

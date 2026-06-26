@@ -9,6 +9,7 @@ const links = [
   ["Projects", "/admin/projects"],
   ["Impact", "/admin/impact"],
   ["Integrations", "/admin/integrations"],
+  ["Thermal inspections", "/admin/thermal-inspections"],
   ["Resources", "/admin/resources"],
   ["Products", "/admin/products"],
   ["Categories", "/admin/categories"],
@@ -22,13 +23,14 @@ const links = [
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!isAdminRole(session?.user.role)) redirect("/admin/login");
+  const user = session?.user;
+  if (!user || !isAdminRole(user.role)) redirect("/admin/login");
 
   return (
     <main className="admin-layout">
       <aside className="admin-sidebar">
         <strong>Alektra Admin</strong>
-        <p>{session?.user.email}</p>
+        <p>{user.email}</p>
         <nav>
           {links.map(([label, href]) => (
             <Link href={href} key={href}>{label}</Link>
