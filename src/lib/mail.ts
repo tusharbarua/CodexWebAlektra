@@ -1,8 +1,9 @@
 import nodemailer from "nodemailer";
 import type { Order, ThermalInspectionRequest } from "@prisma/client";
+import { money } from "@/lib/format";
 
 export async function sendOrderConfirmation(order: Order) {
-  if (!process.env.SMTP_HOST) return { skipped: true };
+  if (!process.env.SMTP_HOST || !order.customerEmail) return { skipped: true };
 
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -17,8 +18,8 @@ export async function sendOrderConfirmation(order: Order) {
     from: process.env.SMTP_FROM ?? "Alektra Renewable <orders@alektraepc.com>",
     to: order.customerEmail,
     subject: `Alektra order ${order.orderNumber}`,
-    text: `Thank you for your order ${order.orderNumber}. Total: BDT ${order.totalBdt}.`,
-    html: `<p>Thank you for your order <strong>${order.orderNumber}</strong>.</p><p>Total: BDT ${order.totalBdt}</p>`
+    text: `Thank you for your order ${order.orderNumber}.\nDelivery: ${order.deliveryLabel ?? order.deliveryMethod}\nDelivery charge: ${money(Number(order.deliveryBdt))}\nTotal: ${money(Number(order.totalBdt))}.`,
+    html: `<p>Thank you for your order <strong>${order.orderNumber}</strong>.</p><p>Delivery: ${order.deliveryLabel ?? order.deliveryMethod}</p><p>Delivery charge: ${money(Number(order.deliveryBdt))}</p><p>Total: ${money(Number(order.totalBdt))}</p>`
   });
 
   return { skipped: false };
@@ -27,7 +28,10 @@ export async function sendOrderConfirmation(order: Order) {
 export async function sendThermalRequestEmails(request: ThermalInspectionRequest, pdfBytes: Uint8Array) {
   if (!process.env.SMTP_HOST) return { clientSent: false, adminSent: false };
   const transporter = createTransport();
-  const summary = `Request ${request.requestNumber}\nInspection: ${request.inspectionType}\nInstitution: ${request.institutionName}\nPV capacity: ${request.pvCapacityKwp} kWp\nAC capacity: ${request.acCapacityKw} kW\nLocation: ${request.projectLocation}`;
+  const location = request.projectFormattedAddress || request.projectLocation || request.manualAddressFallback || "Not provided";
+  const coordinates = request.latitude && request.longitude ? `\nCoordinates: ${request.latitude}, ${request.longitude}` : "";
+  const distance = request.distanceFromBaseKm ? `\nDistance from Alektra base: ${Number(request.distanceFromBaseKm).toFixed(2)} km` : "";
+  const summary = `Request ${request.requestNumber}\nInspection: ${request.inspectionType}\nInstitution: ${request.institutionName}\nPV capacity: ${request.pvCapacityKwp} kWp\nAC capacity: ${request.acCapacityKw} kW\nLocation: ${location}${coordinates}${distance}\nDistance status: ${request.distanceCalculationStatus.replaceAll("_", " ")}`;
   await transporter.sendMail({
     from: process.env.SMTP_FROM ?? "Alektra Thermal <info@alektraepc.com>",
     to: request.email,

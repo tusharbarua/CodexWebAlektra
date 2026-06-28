@@ -2,87 +2,68 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { CartItem, cartSummary, readCart, writeCart } from "@/lib/cart";
 import { money } from "@/lib/format";
-
-type CartItem = {
-  id: string;
-  slug: string;
-  name: string;
-  price: number;
-  image: string;
-  sku: string;
-  quantity: number;
-};
 
 export function CartView() {
   const [items, setItems] = useState<CartItem[]>([]);
-  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items]);
+  const summary = useMemo(() => cartSummary(items), [items]);
 
   useEffect(() => {
-    setItems(JSON.parse(localStorage.getItem("alektra-cart") ?? "[]"));
+    setItems(readCart());
   }, []);
 
   function persist(next: CartItem[]) {
     setItems(next);
-    localStorage.setItem("alektra-cart", JSON.stringify(next));
+    writeCart(next);
+  }
+
+  function updateQuantity(id: string, quantity: number) {
+    persist(items.map((item) => item.id === id ? { ...item, quantity: Math.max(1, Math.min(item.stock ?? 9999, quantity)) } : item));
   }
 
   if (!items.length) {
     return (
-      <div className="panel">
-        <p>Your cart is empty.</p>
-        <Link className="btn" href="/shop">Browse products</Link>
+      <div className="shop-empty-state cart-empty-state">
+        <ShoppingBag size={38} />
+        <h2>Your cart is ready for solar equipment.</h2>
+        <p>Browse modules, inverters, batteries, cables and mounting accessories.</p>
+        <Link href="/shop">Browse products</Link>
       </div>
     );
   }
 
   return (
-    <div className="panel">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Product</th>
-            <th>Qty</th>
-            <th>Total</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.id}>
-              <td>
-                <strong>{item.name}</strong>
-                <br />
-                <small>{item.sku}</small>
-              </td>
-              <td>
-                <input
-                  aria-label={`Quantity for ${item.name}`}
-                  type="number"
-                  min={1}
-                  value={item.quantity}
-                  onChange={(event) =>
-                    persist(items.map((candidate) => (candidate.id === item.id ? { ...candidate, quantity: Number(event.target.value) } : candidate)))
-                  }
-                  style={{ width: 86, padding: 10, border: "1px solid var(--line)", borderRadius: 8 }}
-                />
-              </td>
-              <td>{money(item.price * item.quantity)}</td>
-              <td>
-                <button className="btn secondary" type="button" onClick={() => persist(items.filter((candidate) => candidate.id !== item.id))} aria-label={`Remove ${item.name}`}>
-                  <Trash2 size={18} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="price-row">
-        <strong>Subtotal</strong>
-        <span className="price">{money(subtotal)}</span>
-      </div>
-      <Link className="btn" href="/checkout" style={{ marginTop: 18 }}>Checkout</Link>
+    <div className="cart-layout">
+      <section className="panel cart-items-panel">
+        {items.map((item) => (
+          <article className="cart-line-item" key={item.id}>
+            <img src={item.image} alt={item.name} />
+            <div>
+              <Link href={`/shop/${item.slug}`}><h3>{item.name}</h3></Link>
+              <p>{item.sku}</p>
+              <strong>{money(item.price)}</strong>
+            </div>
+            <div className="cart-qty-control">
+              <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} aria-label={`Decrease ${item.name}`}><Minus size={14} /></button>
+              <input value={item.quantity} inputMode="numeric" onChange={(event) => updateQuantity(item.id, Number(event.target.value) || 1)} aria-label={`Quantity for ${item.name}`} />
+              <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} aria-label={`Increase ${item.name}`}><Plus size={14} /></button>
+            </div>
+            <strong>{money(item.price * item.quantity)}</strong>
+            <button className="cart-remove-button" type="button" onClick={() => persist(items.filter((candidate) => candidate.id !== item.id))} aria-label={`Remove ${item.name}`}>
+              <Trash2 size={17} />
+            </button>
+          </article>
+        ))}
+      </section>
+      <aside className="panel cart-summary-panel">
+        <h2>Cart summary</h2>
+        <div className="checkout-total-row"><span>Items</span><strong>{summary.quantity}</strong></div>
+        <div className="checkout-total-row grand"><span>Subtotal</span><strong>{money(summary.total)}</strong></div>
+        <Link className="btn checkout-submit" href="/checkout">Checkout</Link>
+        <Link className="btn secondary" href="/shop">Continue shopping</Link>
+      </aside>
     </div>
   );
 }

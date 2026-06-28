@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { generateThermalRequestPdf } from "@/lib/thermal-pdf";
 import { sendThermalRequestEmails } from "@/lib/mail";
+import { calculateThermalDistance } from "@/lib/thermal-distance";
 
 const moduleSchema = z.object({
   model: z.string().trim().min(1),
@@ -14,6 +15,11 @@ const schema = z.object({
   modules: z.array(moduleSchema).min(1),
   acCapacityKw: z.coerce.number().nonnegative(),
   projectLocation: z.string().trim().min(3),
+  locationMode: z.enum(["google", "manual"]).default("manual"),
+  projectLocationName: z.string().trim().optional(),
+  projectFormattedAddress: z.string().trim().optional(),
+  googlePlaceId: z.string().trim().optional(),
+  manualAddressFallback: z.string().trim().optional(),
   latitude: z.union([z.string(), z.number()]).optional(),
   longitude: z.union([z.string(), z.number()]).optional(),
   institutionName: z.string().trim().min(2),
@@ -34,12 +40,32 @@ export async function POST(request: Request) {
     if (body.mathAnswer !== 11) return NextResponse.json({ error: "The math answer is incorrect." }, { status: 400 });
     const pvCapacityKwp = body.modules.reduce((sum, module) => sum + module.capacityWp * module.quantity, 0) / 1000;
     if (pvCapacityKwp < 50) return NextResponse.json({ error: "Minimum thermal inspection site size is 50 kWp." }, { status: 400 });
+    const latitude = numeric(body.latitude);
+    const longitude = numeric(body.longitude);
+    if ((latitude !== null && (latitude < -90 || latitude > 90)) || (longitude !== null && (longitude < -180 || longitude > 180))) {
+      return NextResponse.json({ error: "Selected Google location has invalid coordinates." }, { status: 400 });
+    }
+    if (body.locationMode === "google") {
+      if (!body.googlePlaceId) return NextResponse.json({ error: "Please select a suggested Google location." }, { status: 400 });
+      if (!body.projectFormattedAddress) return NextResponse.json({ error: "Selected Google location is missing a formatted address." }, { status: 400 });
+      if (latitude === null || longitude === null) return NextResponse.json({ error: "Selected Google location is missing valid coordinates." }, { status: 400 });
+    } else if (!body.projectLocation && !body.manualAddressFallback) {
+      return NextResponse.json({ error: "Enter the project location manually." }, { status: 400 });
+    }
+    const distance = await calculateThermalDistance(latitude, longitude);
     const requestNumber = `ATH-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase()}`;
     let inspection = await prisma.thermalInspectionRequest.create({
       data: {
         requestNumber, inspectionType: body.inspectionType, moduleDetails: body.modules, pvCapacityKwp,
-        acCapacityKw: body.acCapacityKw, projectLocation: body.projectLocation,
-        latitude: numeric(body.latitude), longitude: numeric(body.longitude),
+        acCapacityKw: body.acCapacityKw,
+        projectLocation: body.projectFormattedAddress || body.projectLocation,
+        projectLocationName: body.projectLocationName || null,
+        projectFormattedAddress: body.projectFormattedAddress || null,
+        googlePlaceId: body.googlePlaceId || null,
+        manualAddressFallback: body.manualAddressFallback || null,
+        latitude, longitude,
+        distanceFromBaseKm: distance.distanceFromBaseKm,
+        distanceCalculationStatus: distance.distanceCalculationStatus,
         institutionName: body.institutionName, address: body.address, email: body.email,
         contactNumber: body.contactNumber, additionalNotes: body.additionalNotes || null
       }

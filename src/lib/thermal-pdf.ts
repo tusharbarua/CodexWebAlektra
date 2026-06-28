@@ -30,8 +30,16 @@ export async function generateThermalRequestPdf(request: ThermalInspectionReques
   addText(`Institution: ${request.institutionName}`);
   addText(`Email: ${request.email}   |   Contact: ${request.contactNumber}`);
   addText(`Address: ${request.address}`);
-  addText(`Project location: ${request.projectLocation}`);
-  if (request.latitude && request.longitude) addText(`Google Maps: https://maps.google.com/?q=${request.latitude},${request.longitude}`);
+  addText(`Project location: ${request.projectFormattedAddress || request.projectLocation || request.manualAddressFallback || "Not provided"}`);
+  if (request.projectLocationName) addText(`Place name: ${request.projectLocationName}`);
+  if (request.googlePlaceId) addText(`Google Place ID: ${request.googlePlaceId}`);
+  if (request.manualAddressFallback) addText(`Manual address: ${request.manualAddressFallback}`);
+  if (request.latitude && request.longitude) {
+    addText(`Coordinates: ${request.latitude}, ${request.longitude}`);
+    addText(`Google Maps: https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}`);
+  }
+  if (request.distanceFromBaseKm) addText(`Distance from Alektra base: ${Number(request.distanceFromBaseKm).toFixed(2)} km`);
+  addText(`Distance calculation status: ${request.distanceCalculationStatus.replaceAll("_", " ")}`);
   y -= 8; addText("PV module details", 14, bold, rgb(0.44, 0.12, 0.7));
   modules.forEach((module, index) => addText(`${index + 1}. ${module.model} | ${module.capacityWp} Wp | ${module.quantity} modules | ${(module.capacityWp * module.quantity / 1000).toFixed(2)} kWp`));
   addText(`Calculated PV capacity: ${request.pvCapacityKwp} kWp`, 11, bold);

@@ -87,6 +87,43 @@ export async function saveThermalPricing(formData: FormData) {
   revalidatePath("/admin/thermal-inspections");
 }
 
+export async function saveThermalBaseLocation(formData: FormData) {
+  await guard();
+  const data = z.object({
+    name: z.string().trim().min(2),
+    address: z.string().trim().optional(),
+    googlePlaceId: z.string().trim().optional(),
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180)
+  }).parse({
+    name: formData.get("name"),
+    address: formData.get("address"),
+    googlePlaceId: formData.get("googlePlaceId"),
+    latitude: formData.get("latitude"),
+    longitude: formData.get("longitude")
+  });
+  await prisma.thermalBaseLocation.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      name: data.name,
+      address: data.address || null,
+      googlePlaceId: data.googlePlaceId || null,
+      latitude: data.latitude,
+      longitude: data.longitude
+    },
+    create: {
+      singletonKey: "default",
+      name: data.name,
+      address: data.address || null,
+      googlePlaceId: data.googlePlaceId || null,
+      latitude: data.latitude,
+      longitude: data.longitude
+    }
+  });
+  revalidatePath("/admin/thermal-inspections");
+  revalidatePath("/admin/thermal-inspections/settings");
+}
+
 export async function resendThermalRequest(formData: FormData) {
   await guard();
   const id = z.string().parse(formData.get("id"));

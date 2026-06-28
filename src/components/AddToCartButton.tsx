@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ShoppingCart } from "lucide-react";
+import { addCartItem } from "@/lib/cart";
 
 type CartProduct = {
   id: string;
@@ -10,25 +11,22 @@ type CartProduct = {
   price: number;
   image: string;
   sku: string;
+  stock?: number;
 };
 
-export function AddToCartButton({ product }: { product: CartProduct }) {
+export function AddToCartButton({ product, quantity = 1, compact = false, disabled = false }: { product: CartProduct; quantity?: number; compact?: boolean; disabled?: boolean }) {
   const [added, setAdded] = useState(false);
 
   function add() {
-    const current = JSON.parse(localStorage.getItem("alektra-cart") ?? "[]") as Array<CartProduct & { quantity: number }>;
-    const existing = current.find((item) => item.id === product.id);
-    const next = existing
-      ? current.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item))
-      : [...current, { ...product, quantity: 1 }];
-    localStorage.setItem("alektra-cart", JSON.stringify(next));
+    addCartItem(product, quantity);
     setAdded(true);
+    window.setTimeout(() => setAdded(false), 1600);
   }
 
   return (
-    <button className="btn" type="button" onClick={add}>
+    <button className={`btn add-cart-button${compact ? " compact" : ""}`} type="button" onClick={add} disabled={disabled || product.stock === 0}>
       <ShoppingCart size={18} />
-      {added ? "Added" : "Add to cart"}
+      {product.stock === 0 ? "Out of stock" : added ? "Added to cart" : "Add to Cart"}
     </button>
   );
 }

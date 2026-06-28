@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { FloatingCartBar } from "@/components/FloatingCartBar";
 import { getFooterSettings } from "@/lib/site-settings";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body suppressHydrationWarning>
         <Header />
         {children}
+        <FloatingCartBar />
         <Footer settings={footerSettings} />
       </body>
     </html>

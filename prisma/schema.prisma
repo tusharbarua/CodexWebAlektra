@@ -23,9 +23,12 @@ enum PublishStatus {
 
 enum OrderStatus {
   PENDING
+  NEW
   CONFIRMED
   PROCESSING
+  READY_FOR_PICKUP
   SHIPPED
+  DELIVERED
   COMPLETED
   CANCELLED
   REFUNDED
@@ -38,6 +41,7 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   UNPAID
+  CASH_ON_DELIVERY
   INITIATED
   PAID
   FAILED
@@ -378,6 +382,9 @@ model ProductCategory {
   name        String
   slug        String            @unique
   description String?
+  icon        String?
+  sortOrder   Int               @default(0)
+  status      PublishStatus     @default(PUBLISHED)
   parentId    String?
   parent      ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
   children    ProductCategory[] @relation("CategoryTree")
@@ -449,15 +456,77 @@ model DeliveryCharge {
   updatedAt   DateTime @updatedAt
 }
 
+model EcommerceDeliverySetting {
+  id                    String   @id @default(cuid())
+  singletonKey          String   @unique @default("default")
+  courierEnabled        Boolean  @default(true)
+  courierMinimumChargeBdt Decimal @default(200)
+  pickupEnabled         Boolean  @default(true)
+  pickupLabel           String   @default("Pick up from our warehouse")
+  pickupAddress         String   @default("Khulshi, Chattogram")
+  pickupChargeBdt       Decimal  @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model MessagingIntegration {
+  id                       String   @id @default(cuid())
+  singletonKey             String   @unique @default("default")
+  providerName             String   @default("Not configured")
+  baseUrl                  String?
+  apiKey                   String?
+  senderId                 String?
+  otpTemplate              String   @default("Your Alektra Renewable OTP is [OTP]. It expires in 5 minutes.")
+  orderConfirmationTemplate String  @default("Your Alektra Renewable order #[ORDER_NUMBER] has been received. Total: BDT [TOTAL]. We will contact you shortly.")
+  isEnabled                Boolean  @default(false)
+  lastTestStatus           String?
+  lastTestAt               DateTime?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model OtpVerification {
+  id          String    @id @default(cuid())
+  mobile      String
+  codeHash    String
+  purpose     String    @default("checkout")
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  attempts    Int       @default(0)
+  resendCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([mobile, purpose, expiresAt])
+}
+
+model NotificationLog {
+  id          String   @id @default(cuid())
+  orderId     String?
+  channel     String
+  recipient   String
+  status      String
+  message     String
+  provider    String?
+  response    String?
+  createdAt   DateTime @default(now())
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
 model Order {
   id              String        @id @default(cuid())
   orderNumber     String        @unique
   userId          String?
   customerName    String
-  customerEmail   String
+  customerEmail   String?
   customerPhone   String
+  companyName     String?
+  verifiedMobile  String?
   billingAddress  Json
   shippingAddress Json
+  deliveryMethod  String    @default("COURIER")
+  deliveryLabel   String?
+  deliveryNotes   String?
   subtotalBdt     Decimal
   discountBdt     Decimal       @default(0)
   deliveryBdt     Decimal       @default(0)
@@ -467,8 +536,11 @@ model Order {
   paymentStatus   PaymentStatus @default(UNPAID)
   couponId        String?
   notes           String?
+  smsStatus       String    @default("NOT_CONFIGURED")
+  emailStatus     String    @default("NOT_CONFIGURED")
   items           OrderItem[]
   transactions    PaymentTransaction[]
+  notifications   NotificationLog[]
   user            User?         @relation(fields: [userId], references: [id])
   coupon          Coupon?       @relation(fields: [couponId], references: [id])
   createdAt       DateTime      @default(now())
@@ -523,8 +595,14 @@ model ThermalInspectionRequest {
   pvCapacityKwp         Decimal
   acCapacityKw          Decimal
   projectLocation       String
+  projectLocationName   String?
+  projectFormattedAddress String?
+  googlePlaceId         String?
   latitude              Decimal?
   longitude             Decimal?
+  manualAddressFallback String?
+  distanceFromBaseKm    Decimal?
+  distanceCalculationStatus String @default("missing_project_coordinates")
   institutionName       String
   address               String
   email                 String
@@ -541,6 +619,18 @@ model ThermalInspectionRequest {
   status                ThermalRequestStatus  @default(NEW)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
+}
+
+model ThermalBaseLocation {
+  id           String   @id @default(cuid())
+  singletonKey String  @unique @default("default")
+  name         String  @default("Alektra Renewable Base")
+  address      String?
+  googlePlaceId String?
+  latitude     Decimal @default(22.3585575)
+  longitude    Decimal @default(91.8196934)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model ThermalPricingRule {

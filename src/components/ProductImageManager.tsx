@@ -16,12 +16,9 @@ export function ProductImageManager({ existingImages }: { existingImages: Existi
   const [previews, setPreviews] = useState<Array<{ name: string; url: string; size: number }>>([]);
   const primaryDefault = existingImages.find((image) => image.isPrimary)?.id ?? existingImages[0]?.id ?? "new-0";
   const helpText = useMemo(() => {
-    const remaining = Math.max(0, 3 - existingImages.length);
     return existingImages.length
-      ? remaining
-        ? `Keep at least 3 images after deletions. Add ${remaining} more image${remaining === 1 ? "" : "s"} when replacing product photos.`
-        : "Keep at least 3 images after deletions. Add more images when replacing product photos."
-      : "Upload at least 3 product images. JPG, PNG and WebP files up to 2 MB each are accepted.";
+      ? "Keep at least 1 image after deletions. Add more images when better gallery photos are available."
+      : "Upload at least 1 product image. JPG, PNG and WebP files up to 2 MB each are accepted.";
   }, [existingImages.length]);
 
   return (

@@ -3,5 +3,5 @@ export function numberFormat(value: number, options?: Intl.NumberFormatOptions) 
 }
 
 export function money(value: number) {
-  return `৳${numberFormat(value)}`;
+  return `BDT ${numberFormat(value)}`;
 }

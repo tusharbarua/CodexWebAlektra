@@ -228,21 +228,47 @@ async function main() {
     });
   }
 
-  const productCategories = [
-    { name: "Solar Modules", slug: "solar-modules", description: "Tier-1 and commercial-grade PV modules." },
-    { name: "Inverters", slug: "shop-inverters", description: "Grid-tied, hybrid and C&I inverter systems." },
-    { name: "Mounting", slug: "shop-mounting", description: "Roof and ground mounting accessories." },
-    { name: "Monitoring", slug: "shop-monitoring", description: "Meters, dataloggers and monitoring accessories." }
+  const ecommerceCategories = [
+    { name: "Solar Module", slug: "solar-module", description: "PV modules for commercial, industrial and residential solar systems.", icon: "solar-module", sortOrder: 10 },
+    { name: "Inverter", slug: "inverter", description: "On-grid, off-grid and hybrid inverter systems.", icon: "inverter", sortOrder: 20 },
+    { name: "Hybrid Inverter", slug: "hybrid-inverter", description: "Hybrid inverter systems for solar and battery integration.", icon: "hybrid-inverter", sortOrder: 21, parentSlug: "inverter" },
+    { name: "Offgrid Inverter", slug: "offgrid-inverter", description: "Off-grid inverter systems for independent power applications.", icon: "offgrid-inverter", sortOrder: 22, parentSlug: "inverter" },
+    { name: "On Grid Inverter", slug: "on-grid-inverter", description: "Grid-tied inverter systems for net metering and C&I PV plants.", icon: "on-grid-inverter", sortOrder: 23, parentSlug: "inverter" },
+    { name: "Battery", slug: "battery", description: "Battery and ESS-ready storage equipment.", icon: "battery", sortOrder: 30 },
+    { name: "Cable", slug: "cable", description: "Solar DC, AC and communication cables.", icon: "cable", sortOrder: 40 },
+    { name: "Mounting System", slug: "mounting-system", description: "Roof and ground mounting structures.", icon: "mounting-system", sortOrder: 50 },
+    { name: "Balance Of System (BOS)", slug: "balance-of-system-bos", description: "Combiner boxes, breakers, protection and electrical accessories.", icon: "bos", sortOrder: 60 }
   ];
 
   const shopCategories = new Map<string, string>();
-  for (const category of productCategories) {
+  for (const category of ecommerceCategories.filter((item) => !item.parentSlug)) {
     const row = await prisma.productCategory.upsert({
       where: { slug: category.slug },
-      update: {},
-      create: category
+      update: { name: category.name, description: category.description, icon: category.icon, sortOrder: category.sortOrder, status: PublishStatus.PUBLISHED },
+      create: { name: category.name, slug: category.slug, description: category.description, icon: category.icon, sortOrder: category.sortOrder, status: PublishStatus.PUBLISHED }
     });
     shopCategories.set(category.slug, row.id);
+  }
+  for (const category of ecommerceCategories.filter((item) => item.parentSlug)) {
+    const row = await prisma.productCategory.upsert({
+      where: { slug: category.slug },
+      update: { name: category.name, description: category.description, icon: category.icon, sortOrder: category.sortOrder, status: PublishStatus.PUBLISHED, parentId: shopCategories.get(category.parentSlug!) },
+      create: { name: category.name, slug: category.slug, description: category.description, icon: category.icon, sortOrder: category.sortOrder, status: PublishStatus.PUBLISHED, parentId: shopCategories.get(category.parentSlug!) }
+    });
+    shopCategories.set(category.slug, row.id);
+  }
+  const legacyCategoryMap = {
+    "solar-modules": shopCategories.get("solar-module")!,
+    "shop-inverters": shopCategories.get("on-grid-inverter")!,
+    "shop-mounting": shopCategories.get("mounting-system")!,
+    "shop-monitoring": shopCategories.get("balance-of-system-bos")!
+  };
+  for (const [legacySlug, targetCategoryId] of Object.entries(legacyCategoryMap)) {
+    const legacy = await prisma.productCategory.findUnique({ where: { slug: legacySlug } });
+    if (legacy) {
+      await prisma.product.updateMany({ where: { categoryId: legacy.id }, data: { categoryId: targetCategoryId } });
+      await prisma.productCategory.update({ where: { id: legacy.id }, data: { status: PublishStatus.UNPUBLISHED, sortOrder: 999 } });
+    }
   }
 
   const products = [
@@ -333,7 +359,7 @@ async function main() {
         priceBdt: product.priceBdt,
         stockQuantity: product.stockQuantity,
         isFeatured: product.isFeatured,
-        categoryId: shopCategories.get(product.category)!,
+        categoryId: legacyCategoryMap[product.category as keyof typeof legacyCategoryMap] ?? shopCategories.get(product.category)!,
         status: PublishStatus.PUBLISHED,
         shortDescription: product.shortDescription,
         technicalDescription: product.technicalDescription,
@@ -374,6 +400,39 @@ async function main() {
     create: { zone: "Dhaka Metro", description: "Standard delivery inside Dhaka", chargeBdt: 300, freeAboveBdt: 100000 }
   });
 
+  await prisma.ecommerceDeliverySetting.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      courierEnabled: true,
+      courierMinimumChargeBdt: 200,
+      pickupEnabled: true,
+      pickupLabel: "Pick up from our warehouse",
+      pickupAddress: "Khulshi, Chattogram",
+      pickupChargeBdt: 0
+    },
+    create: {
+      singletonKey: "default",
+      courierEnabled: true,
+      courierMinimumChargeBdt: 200,
+      pickupEnabled: true,
+      pickupLabel: "Pick up from our warehouse",
+      pickupAddress: "Khulshi, Chattogram",
+      pickupChargeBdt: 0
+    }
+  });
+
+  await prisma.messagingIntegration.upsert({
+    where: { singletonKey: "default" },
+    update: {},
+    create: {
+      singletonKey: "default",
+      providerName: "Not configured",
+      isEnabled: false,
+      otpTemplate: "Your Alektra Renewable OTP is [OTP]. It expires in 5 minutes.",
+      orderConfirmationTemplate: "Your Alektra Renewable order #[ORDER_NUMBER] has been received. Total: BDT [TOTAL]. We will contact you shortly."
+    }
+  });
+
   await prisma.thermalPricingRule.upsert({
     where: { name: "Default" },
     update: {},
@@ -385,6 +444,17 @@ async function main() {
       minimumInspectionFeeBdt: 35000,
       standardMultiplier: 1,
       comprehensiveMultiplier: 1.6
+    }
+  });
+
+  await prisma.thermalBaseLocation.upsert({
+    where: { singletonKey: "default" },
+    update: {},
+    create: {
+      singletonKey: "default",
+      name: "Alektra Renewable Base",
+      latitude: 22.3585575,
+      longitude: 91.8196934
     }
   });
 

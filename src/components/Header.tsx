@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, UserRound } from "lucide-react";
 import { brandLogos, brandNames, getDivisionFromPath } from "@/lib/brand";
+import { CartBadge } from "@/components/CartBadge";
 
 export function Header() {
   const pathname = usePathname();
@@ -33,6 +34,7 @@ export function Header() {
           <Link className="btn dark header-cta" href="/cart" aria-label="Cart">
             <ShoppingCart size={18} />
             Cart
+            <CartBadge />
           </Link>
         </div>
       </div>

@@ -5,8 +5,8 @@ import { auth, isAdminRole } from "@/lib/auth";
 const groups = [
   { label: "Overview", links: [["Dashboard", "/admin"]] },
   { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Homepage Content", "/admin/content"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
-  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Coupons", "/admin/coupons"]] },
-  { label: "Operations", links: [["Projects", "/admin/projects"], ["Resources", "/admin/resources"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Integrations", "/admin/integrations"], ["Impact", "/admin/impact"]] },
+  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Coupons", "/admin/coupons"], ["Delivery Settings", "/admin/settings/delivery"]] },
+  { label: "Operations", links: [["Projects", "/admin/projects"], ["Resources", "/admin/resources"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Integrations", "/admin/integrations"], ["Messaging", "/admin/integrations/messaging"], ["Impact", "/admin/impact"]] },
   { label: "People", links: [["Customers", "/admin/customers"], ["Contacts", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] }
 ];
 

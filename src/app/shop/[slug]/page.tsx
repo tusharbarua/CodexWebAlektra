@@ -2,9 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Download } from "lucide-react";
 import { PublishStatus } from "@prisma/client";
-import { AddToCartButton } from "@/components/AddToCartButton";
 import { ProductCard } from "@/components/ProductCard";
 import { ProductGallery } from "@/components/ProductGallery";
+import { ProductPurchaseBox } from "@/components/ProductPurchaseBox";
 import { money } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -39,13 +39,13 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <p><strong>Model:</strong> {product.model}</p><p>{product.technicalDescription}</p>
             <div className="pill-row">{specs.map(([key, value]) => <span className="pill light-pill" key={key}>{key}: {String(value)}</span>)}</div>
             <div className="hero-actions">
-              <AddToCartButton product={{ id: product.slug, slug: product.slug, name: product.name, price: Number(product.priceBdt), image, sku: product.sku }} />
+              <ProductPurchaseBox product={{ id: product.id, slug: product.slug, name: product.name, price: Number(product.priceBdt), image, sku: product.sku, stock: product.stockQuantity }} />
               {(product.datasheetUrl || product.manualUrl) ? <a className="btn secondary" href={product.datasheetUrl ?? product.manualUrl!} target="_blank" rel="noreferrer"><Download size={18} />Datasheet/manual</a> : null}
             </div>
           </div>
         </div>
         {related.length ? <section className="section tight"><div className="section-heading"><h2>Related products</h2><p>More equipment from this category.</p></div><div className="shop-grid">
-          {related.map((item) => <ProductCard key={item.id} product={{ name: item.name, slug: item.slug, sku: item.sku, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage, description: item.shortDescription }} />)}
+          {related.map((item) => <ProductCard key={item.id} product={{ id: item.id, name: item.name, slug: item.slug, sku: item.sku, model: item.model, brand: item.brand, featured: item.isFeatured, compareAtPrice: item.compareAtPriceBdt ? Number(item.compareAtPriceBdt) : null, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage, description: item.shortDescription }} />)}
         </div></section> : null}
         <p><Link className="btn secondary" href="/shop">Back to shop</Link></p>
       </div>

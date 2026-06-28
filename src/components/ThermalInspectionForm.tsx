@@ -19,6 +19,11 @@ export function ThermalInspectionForm() {
     if (capacity < 50) { setMessage("Minimum thermal inspection site size is 50 kWp."); return; }
     setSending(true); setMessage("");
     const form = new FormData(event.currentTarget);
+    if (form.get("locationMode") === "google" && (!form.get("googlePlaceId") || !form.get("latitude") || !form.get("longitude"))) {
+      setMessage("Please select a suggested Google location before submitting.");
+      setSending(false);
+      return;
+    }
     const response = await fetch("/api/thermal-inspections", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...Object.fromEntries(form.entries()), modules, startedAt: startedAt.current })

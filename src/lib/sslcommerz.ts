@@ -26,7 +26,7 @@ export async function initiateSslCommerz(order: Order) {
     fail_url: process.env.SSLCOMMERZ_FAIL_URL!,
     cancel_url: process.env.SSLCOMMERZ_CANCEL_URL!,
     cus_name: order.customerName,
-    cus_email: order.customerEmail,
+    cus_email: order.customerEmail ?? "orders@alektraepc.com",
     cus_phone: order.customerPhone,
     cus_add1: String((order.shippingAddress as Record<string, unknown>).line1 ?? "Bangladesh"),
     cus_city: String((order.shippingAddress as Record<string, unknown>).city ?? "Dhaka"),

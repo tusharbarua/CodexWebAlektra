@@ -1,6 +1,6 @@
 "use server";
 
-import { IntegrationProvider, PageKey, PublishStatus, Role } from "@prisma/client";
+import { IntegrationProvider, OrderStatus, PageKey, PaymentStatus, PublishStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,6 +8,7 @@ import { z } from "zod";
 import { auth, isAdminRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deletePublicUpload, getFiles, saveUpload, uploadRules } from "@/lib/uploads";
+import { sendOrderNotifications } from "@/lib/notifications";
 
 async function requireAdmin() {
   const session = await auth();
@@ -102,8 +103,8 @@ export async function saveProduct(formData: FormData) {
     : [];
   const deletedIds = new Set(formData.getAll("deleteImageId").map(String));
   const keptImages = existingImages.filter((image) => !deletedIds.has(image.id));
-  if (keptImages.length + uploadedFiles.length < 3) {
-    productError("Upload at least 3 product images before saving.", data.id);
+  if (keptImages.length + uploadedFiles.length < 1) {
+    productError("Upload at least 1 product image before saving.", data.id);
   }
 
   for (const file of uploadedFiles) {
@@ -218,15 +219,32 @@ export async function saveProductCategory(formData: FormData) {
     id: z.string().optional(),
     name: z.string().min(2),
     slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
-    description: z.string().optional()
+    description: z.string().optional(),
+    parentId: z.string().optional(),
+    icon: z.string().optional(),
+    sortOrder: z.coerce.number().int().default(0),
+    status: z.nativeEnum(PublishStatus)
   }).parse({
     id: optional(formData.get("id")) ?? undefined,
     name: text(formData.get("name")),
     slug: text(formData.get("slug")),
-    description: text(formData.get("description"))
+    description: text(formData.get("description")),
+    parentId: text(formData.get("parentId")),
+    icon: text(formData.get("icon")),
+    sortOrder: text(formData.get("sortOrder")) || "0",
+    status: status(formData.get("status"))
   });
-  if (data.id) await prisma.productCategory.update({ where: { id: data.id }, data });
-  else await prisma.productCategory.create({ data });
+  const payload = {
+    name: data.name,
+    slug: data.slug,
+    description: data.description || null,
+    parentId: data.parentId && data.parentId !== data.id ? data.parentId : null,
+    icon: data.icon || null,
+    sortOrder: data.sortOrder,
+    status: data.status
+  };
+  if (data.id) await prisma.productCategory.update({ where: { id: data.id }, data: payload });
+  else await prisma.productCategory.create({ data: payload });
   refresh("/shop", "/admin/categories", "/admin/products");
   redirect("/admin/categories");
 }
@@ -581,10 +599,92 @@ export async function updateOrderStatus(formData: FormData) {
   await requireAdmin();
   const data = z.object({
     id: z.string().min(1),
-    status: z.enum(["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELLED", "REFUNDED"])
-  }).parse({ id: text(formData.get("id")), status: text(formData.get("status")) });
-  await prisma.order.update({ where: { id: data.id }, data: { status: data.status } });
+    status: z.nativeEnum(OrderStatus),
+    paymentStatus: z.nativeEnum(PaymentStatus)
+  }).parse({ id: text(formData.get("id")), status: text(formData.get("status")), paymentStatus: text(formData.get("paymentStatus")) });
+  await prisma.order.update({ where: { id: data.id }, data: { status: data.status, paymentStatus: data.paymentStatus } });
   refresh("/admin/orders");
+}
+
+export async function resendOrderNotifications(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().parse(formData.get("id"));
+  const order = await prisma.order.findUnique({ where: { id }, include: { items: true } });
+  if (!order) throw new Error("Order not found");
+  await sendOrderNotifications(order);
+  refresh("/admin/orders");
+}
+
+export async function saveDeliverySettings(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    courierMinimumChargeBdt: z.coerce.number().nonnegative(),
+    pickupLabel: z.string().min(2),
+    pickupAddress: z.string().min(2),
+    courierEnabled: z.boolean(),
+    pickupEnabled: z.boolean()
+  }).parse({
+    courierMinimumChargeBdt: text(formData.get("courierMinimumChargeBdt")) || "200",
+    pickupLabel: text(formData.get("pickupLabel")),
+    pickupAddress: text(formData.get("pickupAddress")),
+    courierEnabled: formData.get("courierEnabled") === "on",
+    pickupEnabled: formData.get("pickupEnabled") === "on"
+  });
+  await prisma.ecommerceDeliverySetting.upsert({
+    where: { singletonKey: "default" },
+    update: data,
+    create: { singletonKey: "default", ...data }
+  });
+  refresh("/checkout", "/admin/settings/delivery");
+  redirect("/admin/settings/delivery?saved=1");
+}
+
+export async function saveMessagingIntegration(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    providerName: z.string().min(2),
+    baseUrl: z.string().optional(),
+    apiKey: z.string().optional(),
+    senderId: z.string().optional(),
+    otpTemplate: z.string().min(10),
+    orderConfirmationTemplate: z.string().min(10),
+    isEnabled: z.boolean()
+  }).parse({
+    providerName: text(formData.get("providerName")),
+    baseUrl: text(formData.get("baseUrl")),
+    apiKey: text(formData.get("apiKey")),
+    senderId: text(formData.get("senderId")),
+    otpTemplate: text(formData.get("otpTemplate")),
+    orderConfirmationTemplate: text(formData.get("orderConfirmationTemplate")),
+    isEnabled: formData.get("isEnabled") === "on"
+  });
+  const existing = await prisma.messagingIntegration.findUnique({ where: { singletonKey: "default" } });
+  await prisma.messagingIntegration.upsert({
+    where: { singletonKey: "default" },
+    update: { ...data, apiKey: data.apiKey || existing?.apiKey || null },
+    create: { singletonKey: "default", ...data, apiKey: data.apiKey || null }
+  });
+  refresh("/admin/integrations/messaging");
+  redirect("/admin/integrations/messaging?saved=1");
+}
+
+export async function testMessagingIntegration(formData: FormData) {
+  await requireAdmin();
+  const mobile = text(formData.get("testMobile"));
+  await prisma.messagingIntegration.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      lastTestAt: new Date(),
+      lastTestStatus: mobile ? `Test queued for ${mobile}. Provider adapter is not configured in this environment.` : "Enter a test mobile number."
+    },
+    create: {
+      singletonKey: "default",
+      providerName: "Not configured",
+      lastTestAt: new Date(),
+      lastTestStatus: "Messaging provider is not configured."
+    }
+  });
+  refresh("/admin/integrations/messaging");
 }
 
 export async function saveHeroMedia(formData: FormData) {
