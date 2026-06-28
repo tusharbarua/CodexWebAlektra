@@ -34,6 +34,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
         isPrimary: image.isPrimary
       }))} />
       <Field label="Datasheet URL" name="datasheetUrl" value={current?.datasheetUrl} /><Field label="Manual URL" name="manualUrl" value={current?.manualUrl} />
+      <label className="field"><span>Upload datasheet PDF</span><input name="datasheetFile" type="file" accept="application/pdf" /></label>
+      <label className="field"><span>Upload manual PDF</span><input name="manualFile" type="file" accept="application/pdf" /></label>
       <label className="field"><span>Status</span><select name="status" defaultValue={current?.status ?? "DRAFT"}><option>DRAFT</option><option>PUBLISHED</option><option>UNPUBLISHED</option></select></label>
       <label className="check-field"><input type="checkbox" name="isFeatured" defaultChecked={current?.isFeatured} /> Featured product</label>
       <div className="admin-form-actions"><button className="btn" type="submit">{current ? "Save changes" : "Add product"}</button>{current ? <a className="btn secondary" href="/admin/products">Cancel</a> : null}</div>

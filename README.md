@@ -4,6 +4,8 @@ Production-ready Next.js platform for Alektra Renewable, focused on Alektra EPC 
 
 ## Setup
 
+Active local development path: `C:\Projects\AlektraWebsiteE`.
+
 1. Install dependencies:
 
 ```bash

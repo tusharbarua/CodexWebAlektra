@@ -1,19 +1,30 @@
 "use server";
 
-import { PublishStatus } from "@prisma/client";
-import { randomUUID } from "crypto";
-import { mkdir, unlink, writeFile } from "fs/promises";
+import { IntegrationProvider, PageKey, PublishStatus, Role } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import path from "path";
 import { z } from "zod";
 import { auth, isAdminRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deletePublicUpload, getFiles, saveUpload, uploadRules } from "@/lib/uploads";
 
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user || !isAdminRole(session.user.role)) throw new Error("Unauthorized");
   return session.user;
+}
+
+async function requirePagePermission(action: string) {
+  const user = await requireAdmin();
+  if (user.role === "SUPER_ADMIN") return user;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: { appRole: { include: { permissions: true } } }
+  });
+  const allowed = dbUser?.appRole?.permissions.some((permission) => permission.module === "Pages" && permission.action === action);
+  if (!allowed) throw new Error("Unauthorized");
+  return user;
 }
 
 const text = (value: FormDataEntryValue | null) => String(value ?? "").trim();
@@ -23,6 +34,16 @@ const status = (value: FormDataEntryValue | null) =>
 const lines = (value: FormDataEntryValue | null) =>
   text(value).split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 
+function parseJson(value: FormDataEntryValue | null) {
+  const raw = text(value);
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("Settings JSON must be valid JSON.");
+  }
+}
+
 function refresh(...paths: string[]) {
   for (const path of paths) revalidatePath(path);
 }
@@ -30,41 +51,6 @@ function refresh(...paths: string[]) {
 function productError(message: string, productId?: string): never {
   const target = `/admin/products?error=${encodeURIComponent(message)}${productId ? `&edit=${productId}` : ""}`;
   redirect(target);
-}
-
-const allowedProductImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
-const maxProductImageSize = 2 * 1024 * 1024;
-
-function getUploadedImages(formData: FormData) {
-  return formData.getAll("productImages").filter((entry): entry is File => {
-    return typeof entry === "object" && "arrayBuffer" in entry && entry.size > 0;
-  });
-}
-
-async function saveUploadedProductImage(file: File) {
-  if (!allowedProductImageTypes.has(file.type)) {
-    throw new Error("Only JPG, PNG and WebP product images are allowed.");
-  }
-  if (file.size > maxProductImageSize) {
-    throw new Error("Each product image must be 2 MB or smaller.");
-  }
-  const extension = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-  const baseName = path.parse(file.name).name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") || "product";
-  const fileName = `${baseName}-${randomUUID()}.${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, fileName), Buffer.from(await file.arrayBuffer()));
-  return `/uploads/products/${fileName}`;
-}
-
-async function removePublicUpload(imagePath: string) {
-  if (!imagePath.startsWith("/uploads/products/")) return;
-  const fileName = path.basename(imagePath);
-  try {
-    await unlink(path.join(process.cwd(), "public", "uploads", "products", fileName));
-  } catch {
-    // Missing files should not block product editing.
-  }
 }
 
 export async function saveProduct(formData: FormData) {
@@ -87,7 +73,7 @@ export async function saveProduct(formData: FormData) {
     status: z.nativeEnum(PublishStatus)
   });
   const productId = optional(formData.get("id")) ?? undefined;
-  const uploadedFiles = getUploadedImages(formData);
+  const uploadedFiles = getFiles(formData, "productImages");
   let data: z.infer<typeof schema>;
   try {
     data = schema.parse({
@@ -121,12 +107,23 @@ export async function saveProduct(formData: FormData) {
   }
 
   for (const file of uploadedFiles) {
-    if (!allowedProductImageTypes.has(file.type)) {
+    if (!uploadRules.productImage.allowedTypes.has(file.type)) {
       productError("Only JPG, JPEG, PNG and WebP product images are allowed.", data.id);
     }
-    if (file.size > maxProductImageSize) {
+    if (file.size > uploadRules.productImage.maxBytes) {
       productError("Each product image must be 2 MB or smaller.", data.id);
     }
+  }
+
+  const datasheetFile = getFiles(formData, "datasheetFile")[0];
+  const manualFile = getFiles(formData, "manualFile")[0];
+  let datasheetUrl = data.datasheetUrl || null;
+  let manualUrl = data.manualUrl || null;
+  try {
+    if (datasheetFile) datasheetUrl = (await saveUpload(datasheetFile, { kind: "datasheets", fallbackName: "datasheet", ...uploadRules.datasheet })).url;
+    if (manualFile) manualUrl = (await saveUpload(manualFile, { kind: "datasheets", fallbackName: "manual", ...uploadRules.datasheet })).url;
+  } catch (error) {
+    productError(error instanceof Error ? error.message : "Datasheet/manual upload failed.", data.id);
   }
 
   const specifications = Object.fromEntries(
@@ -147,8 +144,8 @@ export async function saveProduct(formData: FormData) {
     shortDescription: data.shortDescription,
     technicalDescription: data.technicalDescription,
     specifications,
-    datasheetUrl: data.datasheetUrl || null,
-    manualUrl: data.manualUrl || null,
+    datasheetUrl,
+    manualUrl,
     isFeatured: formData.get("isFeatured") === "on",
     status: data.status
   };
@@ -159,7 +156,7 @@ export async function saveProduct(formData: FormData) {
   const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
   if (imagesToDelete.length) {
     await prisma.productImage.deleteMany({ where: { id: { in: imagesToDelete.map((image) => image.id) } } });
-    await Promise.all(imagesToDelete.map((image) => removePublicUpload(image.imagePath)));
+    await Promise.all(imagesToDelete.map((image) => deletePublicUpload(image.imagePath)));
   }
 
   const primaryImage = text(formData.get("primaryImage"));
@@ -179,11 +176,11 @@ export async function saveProduct(formData: FormData) {
   const createdImages = [];
   for (const [index, file] of uploadedFiles.entries()) {
     try {
-      const imagePath = await saveUploadedProductImage(file);
+      const saved = await saveUpload(file, { kind: "products", fallbackName: "product", ...uploadRules.productImage });
       createdImages.push(await prisma.productImage.create({
         data: {
           productId: product.id,
-          imagePath,
+          imagePath: saved.url,
           altText: product.name,
           sortOrder: keptImages.length + index,
           isPrimary: primaryImage === `new-${index}` || (!primaryImage && keptImages.length === 0 && index === 0)
@@ -208,7 +205,10 @@ export async function saveProduct(formData: FormData) {
 
 export async function deleteProduct(formData: FormData) {
   await requireAdmin();
-  await prisma.product.delete({ where: { id: z.string().parse(formData.get("id")) } });
+  const id = z.string().parse(formData.get("id"));
+  const images = await prisma.productImage.findMany({ where: { productId: id } });
+  await prisma.product.delete({ where: { id } });
+  await Promise.all(images.map((image) => deletePublicUpload(image.imagePath)));
   refresh("/", "/shop", "/admin/products");
 }
 
@@ -272,6 +272,7 @@ export async function saveResource(formData: FormData) {
     excerpt: z.string().min(10),
     body: z.string().min(20),
     coverImage: z.string().optional(),
+    coverImageAlt: z.string().optional(),
     seoTitle: z.string().optional(),
     seoDescription: z.string().optional(),
     status: z.nativeEnum(PublishStatus)
@@ -283,14 +284,34 @@ export async function saveResource(formData: FormData) {
     excerpt: text(formData.get("excerpt")),
     body: text(formData.get("body")),
     coverImage: text(formData.get("coverImage")),
+    coverImageAlt: text(formData.get("coverImageAlt")),
     seoTitle: text(formData.get("seoTitle")),
     seoDescription: text(formData.get("seoDescription")),
     status: status(formData.get("status"))
   });
+  const existing = data.id ? await prisma.resourceArticle.findUnique({ where: { id: data.id } }) : null;
+  const imageFile = getFiles(formData, "coverImageFile")[0];
+  let coverImage = data.coverImage || existing?.coverImage || null;
+  try {
+    if (imageFile) {
+      const saved = await saveUpload(imageFile, { kind: "resources", fallbackName: "resource", ...uploadRules.adminImage });
+      if (existing?.coverImage) await deletePublicUpload(existing.coverImage);
+      coverImage = saved.url;
+    }
+  } catch (error) {
+    redirect(`/admin/resources?error=${encodeURIComponent(error instanceof Error ? error.message : "Resource image upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
+  }
+
+  if (formData.get("deleteCoverImage") === "on") {
+    if (existing?.coverImage) await deletePublicUpload(existing.coverImage);
+    coverImage = null;
+  }
+
   const articleData = {
     ...data,
     id: undefined,
-    coverImage: data.coverImage || null,
+    coverImage,
+    coverImageAlt: data.coverImageAlt || null,
     seoTitle: data.seoTitle || null,
     seoDescription: data.seoDescription || null,
     publishedAt: data.status === PublishStatus.PUBLISHED ? new Date() : null,
@@ -305,7 +326,10 @@ export async function saveResource(formData: FormData) {
 
 export async function deleteResource(formData: FormData) {
   await requireAdmin();
-  await prisma.resourceArticle.delete({ where: { id: z.string().parse(formData.get("id")) } });
+  const id = z.string().parse(formData.get("id"));
+  const article = await prisma.resourceArticle.findUnique({ where: { id } });
+  await prisma.resourceArticle.delete({ where: { id } });
+  await deletePublicUpload(article?.coverImage);
   refresh("/", "/resources", "/admin/resources");
 }
 
@@ -344,26 +368,85 @@ export async function saveProject(formData: FormData) {
     videoUrl: text(formData.get("videoUrl")),
     status: status(formData.get("status"))
   });
+  const existingImages = data.id
+    ? await prisma.projectImage.findMany({ where: { projectId: data.id }, orderBy: { sortOrder: "asc" } })
+    : [];
+  const deletedIds = new Set(formData.getAll("deleteProjectImageId").map(String));
+  const keptImages = existingImages.filter((image) => !deletedIds.has(image.id));
+  const uploadedFiles = getFiles(formData, "projectImages");
+  for (const file of uploadedFiles) {
+    if (!uploadRules.adminImage.allowedTypes.has(file.type)) redirect(`/admin/projects?error=${encodeURIComponent("Only JPG, JPEG, PNG and WebP project images are allowed.")}${data.id ? `&edit=${data.id}` : ""}`);
+    if (file.size > uploadRules.adminImage.maxBytes) redirect(`/admin/projects?error=${encodeURIComponent("Each project image must be 3 MB or smaller.")}${data.id ? `&edit=${data.id}` : ""}`);
+  }
+
   const projectData = {
     ...data,
     id: undefined,
     clientName: data.clientName || null,
     commissionedAt: data.commissionedAt ? new Date(data.commissionedAt) : null,
-    coverImage: data.coverImage || null,
+    coverImage: data.coverImage || keptImages.find((image) => image.isPrimary)?.imagePath || keptImages[0]?.imagePath || null,
     inverterBrandModel: data.inverterBrandModel || null,
     moduleBrandModel: data.moduleBrandModel || null,
     videoUrl: data.videoUrl || null,
     imageUrls: lines(formData.get("imageUrls"))
   };
-  if (data.id) await prisma.project.update({ where: { id: data.id }, data: projectData });
-  else await prisma.project.create({ data: projectData });
+  const project = data.id
+    ? await prisma.project.update({ where: { id: data.id }, data: projectData })
+    : await prisma.project.create({ data: projectData });
+
+  const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
+  if (imagesToDelete.length) {
+    await prisma.projectImage.deleteMany({ where: { id: { in: imagesToDelete.map((image) => image.id) } } });
+    await Promise.all(imagesToDelete.map((image) => deletePublicUpload(image.imagePath)));
+  }
+
+  const primaryImage = text(formData.get("primaryProjectImage"));
+  await Promise.all(
+    keptImages.map((image) =>
+      prisma.projectImage.update({
+        where: { id: image.id },
+        data: {
+          altText: text(formData.get(`projectImageAlt_${image.id}`)) || project.title,
+          sortOrder: Number(text(formData.get(`projectImageSort_${image.id}`)) || image.sortOrder),
+          isPrimary: primaryImage === image.id
+        }
+      })
+    )
+  );
+
+  for (const [index, file] of uploadedFiles.entries()) {
+    try {
+      const saved = await saveUpload(file, { kind: "projects", fallbackName: "project", ...uploadRules.adminImage });
+      await prisma.projectImage.create({
+        data: {
+          projectId: project.id,
+          imagePath: saved.url,
+          altText: project.title,
+          sortOrder: keptImages.length + index,
+          isPrimary: primaryImage === `new-project-${index}` || (!primaryImage && keptImages.length === 0 && index === 0)
+        }
+      });
+    } catch (error) {
+      redirect(`/admin/projects?error=${encodeURIComponent(error instanceof Error ? error.message : "Project image upload failed.")}&edit=${project.id}`);
+    }
+  }
+
+  const finalImages = await prisma.projectImage.findMany({ where: { projectId: project.id }, orderBy: { sortOrder: "asc" } });
+  const primary = finalImages.find((image) => image.isPrimary) ?? finalImages[0];
+  if (primary) {
+    if (!primary.isPrimary) await prisma.projectImage.update({ where: { id: primary.id }, data: { isPrimary: true } });
+    await prisma.project.update({ where: { id: project.id }, data: { coverImage: primary.imagePath } });
+  }
   refresh("/", "/admin/projects");
   redirect("/admin/projects");
 }
 
 export async function deleteProject(formData: FormData) {
   await requireAdmin();
-  await prisma.project.delete({ where: { id: z.string().parse(formData.get("id")) } });
+  const id = z.string().parse(formData.get("id"));
+  const images = await prisma.projectImage.findMany({ where: { projectId: id } });
+  await prisma.project.delete({ where: { id } });
+  await Promise.all(images.map((image) => deletePublicUpload(image.imagePath)));
   refresh("/", "/admin/projects");
 }
 
@@ -502,4 +585,430 @@ export async function updateOrderStatus(formData: FormData) {
   }).parse({ id: text(formData.get("id")), status: text(formData.get("status")) });
   await prisma.order.update({ where: { id: data.id }, data: { status: data.status } });
   refresh("/admin/orders");
+}
+
+export async function saveHeroMedia(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    id: z.string().optional(),
+    title: z.string().min(2),
+    mediaType: z.enum(["image", "video"]),
+    url: z.string().optional(),
+    alt: z.string().min(2),
+    sortOrder: z.coerce.number().int().default(0),
+    status: z.nativeEnum(PublishStatus)
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    title: text(formData.get("title")),
+    mediaType: text(formData.get("mediaType")),
+    url: text(formData.get("url")),
+    alt: text(formData.get("alt")),
+    sortOrder: text(formData.get("sortOrder")),
+    status: status(formData.get("status"))
+  });
+
+  const existing = data.id ? await prisma.heroMedia.findUnique({ where: { id: data.id } }) : null;
+  const file = getFiles(formData, "mediaFile")[0];
+  let url = data.url || existing?.url || "";
+  let mimeType = existing?.mimeType ?? null;
+  let fileSize = existing?.fileSize ?? null;
+  if (file) {
+    const rules = data.mediaType === "video" ? uploadRules.heroVideo : uploadRules.adminImage;
+    try {
+      const saved = await saveUpload(file, { kind: "hero", fallbackName: "hero-media", ...rules });
+      if (existing?.url) await deletePublicUpload(existing.url);
+      url = saved.url;
+      mimeType = saved.mimeType;
+      fileSize = saved.size;
+    } catch (error) {
+      redirect(`/admin/hero-media?error=${encodeURIComponent(error instanceof Error ? error.message : "Hero media upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
+    }
+  }
+  if (!url) redirect(`/admin/hero-media?error=${encodeURIComponent("Upload a file or provide a media URL.")}${data.id ? `&edit=${data.id}` : ""}`);
+
+  const payload = {
+    title: data.title,
+    mediaType: data.mediaType,
+    url,
+    alt: data.alt,
+    sortOrder: data.sortOrder,
+    isPrimary: formData.get("isPrimary") === "on",
+    status: data.status,
+    mimeType,
+    fileSize
+  };
+  const media = data.id
+    ? await prisma.heroMedia.update({ where: { id: data.id }, data: payload })
+    : await prisma.heroMedia.create({ data: payload });
+  if (payload.isPrimary) {
+    await prisma.heroMedia.updateMany({ where: { id: { not: media.id } }, data: { isPrimary: false } });
+  }
+  refresh("/", "/admin/hero-media");
+  redirect("/admin/hero-media");
+}
+
+export async function deleteHeroMedia(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().parse(formData.get("id"));
+  const media = await prisma.heroMedia.findUnique({ where: { id } });
+  await prisma.heroMedia.delete({ where: { id } });
+  await deletePublicUpload(media?.url);
+  refresh("/", "/admin/hero-media");
+}
+
+export async function saveIntegration(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    id: z.string().optional(),
+    label: z.string().min(2),
+    provider: z.nativeEnum(IntegrationProvider),
+    baseUrl: z.string().optional(),
+    apiKey: z.string().optional(),
+    apiSecret: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    plantMapping: z.string().optional(),
+    syncFrequencyMinutes: z.coerce.number().int().positive(),
+    isEnabled: z.boolean()
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    label: text(formData.get("label")),
+    provider: text(formData.get("provider")),
+    baseUrl: text(formData.get("baseUrl")),
+    apiKey: text(formData.get("apiKey")),
+    apiSecret: text(formData.get("apiSecret")),
+    username: text(formData.get("username")),
+    password: text(formData.get("password")),
+    plantMapping: text(formData.get("plantMapping")),
+    syncFrequencyMinutes: text(formData.get("syncFrequencyMinutes")) || "1440",
+    isEnabled: formData.get("isEnabled") === "on"
+  });
+  const existing = data.id ? await prisma.monitoringIntegration.findUnique({ where: { id: data.id } }) : null;
+  const payload = {
+    label: data.label,
+    provider: data.provider,
+    baseUrl: data.baseUrl || null,
+    apiKey: data.apiKey || existing?.apiKey || null,
+    apiSecret: data.apiSecret || existing?.apiSecret || null,
+    username: data.username || existing?.username || null,
+    password: data.password || existing?.password || null,
+    plantMapping: data.plantMapping || null,
+    syncFrequencyMinutes: data.syncFrequencyMinutes,
+    isEnabled: data.isEnabled
+  };
+  if (data.id) await prisma.monitoringIntegration.update({ where: { id: data.id }, data: payload });
+  else await prisma.monitoringIntegration.create({ data: payload });
+  refresh("/admin/integrations");
+  redirect("/admin/integrations");
+}
+
+export async function deleteIntegration(formData: FormData) {
+  await requireAdmin();
+  await prisma.monitoringIntegration.delete({ where: { id: z.string().parse(formData.get("id")) } });
+  refresh("/admin/integrations");
+}
+
+export async function testIntegration(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().parse(formData.get("id"));
+  await prisma.monitoringIntegration.update({
+    where: { id },
+    data: {
+      lastSyncAt: new Date(),
+      lastSyncStatus: "Test unavailable",
+      lastSyncMessage: "Connection testing is safely stubbed until provider-specific credentials and endpoints are configured.",
+      errorLog: null
+    }
+  });
+  refresh("/admin/integrations");
+}
+
+export async function manualSyncIntegration(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().parse(formData.get("id"));
+  await prisma.monitoringIntegration.update({
+    where: { id },
+    data: {
+      lastSyncAt: new Date(),
+      lastSyncStatus: "Sync skipped",
+      lastSyncMessage: "Manual sync is ready for provider adapters. No impact baseline values were overwritten.",
+      errorLog: null
+    }
+  });
+  refresh("/admin/integrations");
+}
+
+export async function saveUser(formData: FormData) {
+  const actor = await requireAdmin();
+  if (actor.role !== "SUPER_ADMIN" && actor.role !== "ADMIN") throw new Error("Unauthorized");
+  const data = z.object({
+    id: z.string().optional(),
+    name: z.string().min(2),
+    email: z.string().email(),
+    phone: z.string().optional(),
+    role: z.nativeEnum(Role),
+    appRoleId: z.string().optional(),
+    password: z.string().optional(),
+    isActive: z.boolean()
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    name: text(formData.get("name")),
+    email: text(formData.get("email")),
+    phone: text(formData.get("phone")),
+    role: text(formData.get("role")) || Role.ADMIN,
+    appRoleId: text(formData.get("appRoleId")),
+    password: text(formData.get("password")),
+    isActive: formData.get("isActive") === "on"
+  });
+  const passwordHash = data.password ? await bcrypt.hash(data.password, 12) : undefined;
+  const payload = {
+    name: data.name,
+    email: data.email,
+    phone: data.phone || null,
+    role: data.role,
+    appRoleId: data.appRoleId || null,
+    isActive: data.isActive,
+    ...(passwordHash ? { passwordHash } : {})
+  };
+  if (data.id) await prisma.user.update({ where: { id: data.id }, data: payload });
+  else await prisma.user.create({ data: payload });
+  refresh("/admin/users");
+  redirect("/admin/users");
+}
+
+export async function deleteUser(formData: FormData) {
+  const actor = await requireAdmin();
+  if (actor.role !== "SUPER_ADMIN") throw new Error("Only Super Admin can delete users.");
+  const id = z.string().parse(formData.get("id"));
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (user?.role === "SUPER_ADMIN") {
+    const superAdmins = await prisma.user.count({ where: { role: "SUPER_ADMIN", isActive: true } });
+    if (superAdmins <= 1) throw new Error("The last Super Admin cannot be deleted.");
+  }
+  await prisma.user.delete({ where: { id } });
+  refresh("/admin/users");
+}
+
+export async function saveRole(formData: FormData) {
+  const actor = await requireAdmin();
+  if (actor.role !== "SUPER_ADMIN") throw new Error("Only Super Admin can manage roles.");
+  const data = z.object({
+    id: z.string().optional(),
+    name: z.string().min(2),
+    description: z.string().optional()
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    name: text(formData.get("name")),
+    description: text(formData.get("description"))
+  });
+  const role = data.id
+    ? await prisma.appRole.update({ where: { id: data.id }, data: { name: data.name, description: data.description || null } })
+    : await prisma.appRole.create({ data: { name: data.name, description: data.description || null } });
+  if (role.isSystem && role.name === "Super Admin") {
+    refresh("/admin/roles", "/admin/users");
+    redirect("/admin/roles");
+  }
+  await prisma.appRolePermission.deleteMany({ where: { roleId: role.id } });
+  const permissions = formData.getAll("permission").map(String).map((value) => {
+    const [module, action] = value.split(":");
+    return { roleId: role.id, module, action };
+  }).filter((item) => item.module && item.action);
+  if (permissions.length) await prisma.appRolePermission.createMany({ data: permissions });
+  refresh("/admin/roles", "/admin/users");
+  redirect("/admin/roles");
+}
+
+export async function deleteRole(formData: FormData) {
+  const actor = await requireAdmin();
+  if (actor.role !== "SUPER_ADMIN") throw new Error("Only Super Admin can manage roles.");
+  const id = z.string().parse(formData.get("id"));
+  const role = await prisma.appRole.findUnique({ where: { id }, include: { users: true } });
+  if (role?.isSystem || role?.users.length) throw new Error("System roles or roles assigned to users cannot be deleted.");
+  await prisma.appRole.delete({ where: { id } });
+  refresh("/admin/roles");
+}
+
+export async function saveCmsPage(formData: FormData) {
+  await requirePagePermission("Edit");
+  const data = z.object({
+    id: z.string().min(1),
+    pageKey: z.nativeEnum(PageKey),
+    title: z.string().min(2),
+    slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+    metaTitle: z.string().optional(),
+    metaDescription: z.string().optional(),
+    status: z.nativeEnum(PublishStatus)
+  }).parse({
+    id: text(formData.get("id")),
+    pageKey: text(formData.get("pageKey")),
+    title: text(formData.get("title")),
+    slug: text(formData.get("slug")),
+    metaTitle: text(formData.get("metaTitle")),
+    metaDescription: text(formData.get("metaDescription")),
+    status: status(formData.get("status"))
+  });
+  await prisma.page.update({
+    where: { id: data.id },
+    data: {
+      title: data.title,
+      slug: data.slug,
+      metaTitle: data.metaTitle || null,
+      metaDescription: data.metaDescription || null,
+      status: data.status
+    }
+  });
+  refresh(`/${data.slug}`, `/admin/pages/${data.pageKey}`, "/admin/pages");
+  redirect(`/admin/pages/${data.pageKey}?saved=page`);
+}
+
+export async function savePageSection(formData: FormData) {
+  await requirePagePermission(text(formData.get("id")) ? "Edit" : "Create");
+  const parsedSettings = parseJson(formData.get("settingsJson"));
+  const settingsKicker = text(formData.get("settingsKicker"));
+  const settingsJson = settingsKicker
+    ? { ...((parsedSettings && typeof parsedSettings === "object" && !Array.isArray(parsedSettings)) ? parsedSettings : {}), kicker: settingsKicker }
+    : parsedSettings;
+  const data = z.object({
+    id: z.string().optional(),
+    pageId: z.string().min(1),
+    pageKey: z.nativeEnum(PageKey),
+    sectionKey: z.string().min(2).regex(/^[a-z0-9-]+$/),
+    sectionType: z.string().min(2),
+    title: z.string().min(1),
+    subtitle: z.string().optional(),
+    body: z.string().optional(),
+    sortOrder: z.coerce.number().int(),
+    isPublished: z.boolean()
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    pageId: text(formData.get("pageId")),
+    pageKey: text(formData.get("pageKey")),
+    sectionKey: text(formData.get("sectionKey")),
+    sectionType: text(formData.get("sectionType")),
+    title: text(formData.get("title")),
+    subtitle: text(formData.get("subtitle")),
+    body: text(formData.get("body")),
+    sortOrder: text(formData.get("sortOrder")) || "0",
+    isPublished: formData.get("isPublished") === "on"
+  });
+  const payload = {
+    sectionKey: data.sectionKey,
+    sectionType: data.sectionType,
+    title: data.title,
+    subtitle: data.subtitle || null,
+    body: data.body || null,
+    sortOrder: data.sortOrder,
+    isPublished: data.isPublished,
+    settingsJson
+  };
+  if (data.id) await prisma.pageSection.update({ where: { id: data.id }, data: payload });
+  else await prisma.pageSection.create({ data: { pageId: data.pageId, ...payload } });
+  refresh(`/${data.pageKey}`, `/admin/pages/${data.pageKey}`);
+  redirect(`/admin/pages/${data.pageKey}?saved=section`);
+}
+
+export async function deletePageSection(formData: FormData) {
+  await requirePagePermission("Delete");
+  const data = z.object({ id: z.string().min(1), pageKey: z.nativeEnum(PageKey) }).parse({
+    id: text(formData.get("id")),
+    pageKey: text(formData.get("pageKey"))
+  });
+  const items = await prisma.pageSectionItem.findMany({ where: { sectionId: data.id } });
+  await prisma.pageSection.delete({ where: { id: data.id } });
+  await Promise.all(items.flatMap((item) => [deletePublicUpload(item.imagePath), deletePublicUpload(item.videoPath)]));
+  refresh(`/${data.pageKey}`, `/admin/pages/${data.pageKey}`);
+}
+
+export async function savePageSectionItem(formData: FormData) {
+  await requirePagePermission(text(formData.get("id")) ? "Edit" : "Create");
+  const settingsJson = parseJson(formData.get("settingsJson"));
+  const data = z.object({
+    id: z.string().optional(),
+    sectionId: z.string().min(1),
+    pageKey: z.nativeEnum(PageKey),
+    title: z.string().min(1),
+    subtitle: z.string().optional(),
+    body: z.string().optional(),
+    icon: z.string().optional(),
+    imagePath: z.string().optional(),
+    videoPath: z.string().optional(),
+    linkText: z.string().optional(),
+    linkUrl: z.string().optional(),
+    badge: z.string().optional(),
+    sortOrder: z.coerce.number().int(),
+    isPublished: z.boolean()
+  }).parse({
+    id: optional(formData.get("id")) ?? undefined,
+    sectionId: text(formData.get("sectionId")),
+    pageKey: text(formData.get("pageKey")),
+    title: text(formData.get("title")),
+    subtitle: text(formData.get("subtitle")),
+    body: text(formData.get("body")),
+    icon: text(formData.get("icon")),
+    imagePath: text(formData.get("imagePath")),
+    videoPath: text(formData.get("videoPath")),
+    linkText: text(formData.get("linkText")),
+    linkUrl: text(formData.get("linkUrl")),
+    badge: text(formData.get("badge")),
+    sortOrder: text(formData.get("sortOrder")) || "0",
+    isPublished: formData.get("isPublished") === "on"
+  });
+  const existing = data.id ? await prisma.pageSectionItem.findUnique({ where: { id: data.id } }) : null;
+  const imageFile = getFiles(formData, "imageFile")[0];
+  const videoFile = getFiles(formData, "videoFile")[0];
+  let imagePath = data.imagePath || existing?.imagePath || null;
+  let videoPath = data.videoPath || existing?.videoPath || null;
+  try {
+    if (imageFile) {
+      const saved = await saveUpload(imageFile, { kind: "pages", fallbackName: "page-image", ...uploadRules.adminImage });
+      await deletePublicUpload(existing?.imagePath);
+      imagePath = saved.url;
+    }
+    if (videoFile) {
+      const saved = await saveUpload(videoFile, { kind: "pages", fallbackName: "page-video", ...uploadRules.heroVideo });
+      await deletePublicUpload(existing?.videoPath);
+      videoPath = saved.url;
+    }
+  } catch (error) {
+    redirect(`/admin/pages/${data.pageKey}?error=${encodeURIComponent(error instanceof Error ? error.message : "Page media upload failed.")}${data.id ? `&editItem=${data.id}` : ""}`);
+  }
+  if (formData.get("deleteImage") === "on") {
+    await deletePublicUpload(existing?.imagePath);
+    imagePath = null;
+  }
+  if (formData.get("deleteVideo") === "on") {
+    await deletePublicUpload(existing?.videoPath);
+    videoPath = null;
+  }
+  const payload = {
+    title: data.title,
+    subtitle: data.subtitle || null,
+    body: data.body || null,
+    icon: data.icon || null,
+    imagePath,
+    videoPath,
+    linkText: data.linkText || null,
+    linkUrl: data.linkUrl || null,
+    badge: data.badge || null,
+    sortOrder: data.sortOrder,
+    settingsJson,
+    isPublished: data.isPublished
+  };
+  if (data.id) await prisma.pageSectionItem.update({ where: { id: data.id }, data: payload });
+  else await prisma.pageSectionItem.create({ data: { sectionId: data.sectionId, ...payload } });
+  refresh(`/${data.pageKey}`, `/admin/pages/${data.pageKey}`);
+  redirect(`/admin/pages/${data.pageKey}?saved=item`);
+}
+
+export async function deletePageSectionItem(formData: FormData) {
+  await requirePagePermission("Delete");
+  const data = z.object({ id: z.string().min(1), pageKey: z.nativeEnum(PageKey) }).parse({
+    id: text(formData.get("id")),
+    pageKey: text(formData.get("pageKey"))
+  });
+  const item = await prisma.pageSectionItem.findUnique({ where: { id: data.id } });
+  await prisma.pageSectionItem.delete({ where: { id: data.id } });
+  await deletePublicUpload(item?.imagePath);
+  await deletePublicUpload(item?.videoPath);
+  refresh(`/${data.pageKey}`, `/admin/pages/${data.pageKey}`);
 }

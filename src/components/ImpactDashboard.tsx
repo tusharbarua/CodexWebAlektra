@@ -38,10 +38,12 @@ export function ImpactDashboard({ impact }: { impact: ImpactValues }) {
             <div className="metric" key={label}>
               <Icon size={22} />
               <strong>
-                <Counter value={value} maximumFractionDigits={digits} />
-                {suffix ? <small> {suffix}</small> : null}
+                <span className="impact-value-number">
+                  <Counter value={value} maximumFractionDigits={digits} />
+                </span>
+                {suffix ? <small className="impact-value-unit">{suffix}</small> : null}
               </strong>
-              <span>{label}</span>
+              <span className="impact-label">{label}</span>
             </div>
           ))}
         </div>

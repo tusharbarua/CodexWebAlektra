@@ -21,11 +21,11 @@ export default async function AdminPage() {
     <div>
       <p className="kicker">Dashboard</p>
       <h1>Control center.</h1>
-      <div className="impact-grid" style={{ marginTop: 24 }}>
+      <div className="admin-metric-grid" style={{ marginTop: 24 }}>
         {cards.map(([label, value]) => (
-          <div className="metric" style={{ color: "var(--ink)", background: "#fff", borderColor: "var(--line)" }} key={label}>
+          <div className="admin-metric-card" key={label}>
             <strong>{value}</strong>
-            <span style={{ color: "var(--muted)" }}>{label}</span>
+            <span>{label}</span>
           </div>
         ))}
       </div>

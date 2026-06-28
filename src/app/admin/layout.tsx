@@ -2,24 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, isAdminRole } from "@/lib/auth";
 
-const links = [
-  ["Overview", "/admin"],
-  ["Content", "/admin/content"],
-  ["Hero media", "/admin/media"],
-  ["Projects", "/admin/projects"],
-  ["Impact", "/admin/impact"],
-  ["Integrations", "/admin/integrations"],
-  ["Thermal inspections", "/admin/thermal-inspections"],
-  ["Resources", "/admin/resources"],
-  ["Products", "/admin/products"],
-  ["Categories", "/admin/categories"],
-  ["Orders", "/admin/orders"],
-  ["Customers", "/admin/customers"],
-  ["Coupons", "/admin/coupons"],
-  ["Contacts", "/admin/contacts"],
-  ["SEO", "/admin/seo"],
-  ["Footer settings", "/admin/site-settings/footer"],
-  ["Users & roles", "/admin/users"]
+const groups = [
+  { label: "Overview", links: [["Dashboard", "/admin"]] },
+  { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Homepage Content", "/admin/content"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
+  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Coupons", "/admin/coupons"]] },
+  { label: "Operations", links: [["Projects", "/admin/projects"], ["Resources", "/admin/resources"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Integrations", "/admin/integrations"], ["Impact", "/admin/impact"]] },
+  { label: "People", links: [["Customers", "/admin/customers"], ["Contacts", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] }
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -30,15 +18,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <main className="admin-layout">
       <aside className="admin-sidebar">
-        <strong>Alektra Admin</strong>
-        <p>{user.email}</p>
+        <div className="admin-brand"><strong>Alektra Admin</strong><span>Control Center</span></div>
         <nav>
-          {links.map(([label, href]) => (
-            <Link href={href} key={href}>{label}</Link>
+          {groups.map((group) => (
+            <div className="admin-nav-group" key={group.label}>
+              <span>{group.label}</span>
+              {group.links.map(([label, href]) => (
+                <Link href={href} key={href}>{label}</Link>
+              ))}
+            </div>
           ))}
         </nav>
       </aside>
-      <section className="admin-main">{children}</section>
+      <section className="admin-shell">
+        <header className="admin-topbar">
+          <div><strong>Dashboard</strong><span>Manage Alektra website operations</span></div>
+          <div className="admin-user"><span>{user.email}</span><Link href="/">View site</Link></div>
+        </header>
+        <div className="admin-main">{children}</div>
+      </section>
     </main>
   );
 }

@@ -29,6 +29,7 @@ export const authConfig = {
 
         const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
         if (!ok) return null;
+        await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
         return {
           id: user.id,

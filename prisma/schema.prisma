@@ -68,21 +68,54 @@ enum ThermalRequestStatus {
   CANCELLED
 }
 
+enum PageKey {
+  epc
+  thermal
+  sparkle
+  mapping
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
   email         String    @unique
+  phone         String?
   emailVerified DateTime?
   image         String?
   passwordHash  String?
   role          Role      @default(CUSTOMER)
+  appRoleId     String?
   isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  appRole       AppRole?  @relation(fields: [appRoleId], references: [id])
   accounts      Account[]
   sessions      Session[]
   orders        Order[]
   articles      ResourceArticle[] @relation("ArticleAuthor")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model AppRole {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  description String?
+  isSystem    Boolean             @default(false)
+  users       User[]
+  permissions AppRolePermission[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model AppRolePermission {
+  id        String   @id @default(cuid())
+  roleId    String
+  module    String
+  action    String
+  role      AppRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, module, action])
 }
 
 model Account {
@@ -141,6 +174,58 @@ model SiteContent {
   updatedAt DateTime      @updatedAt
 }
 
+model Page {
+  id              String        @id @default(cuid())
+  pageKey         PageKey       @unique
+  title           String
+  slug            String        @unique
+  metaTitle       String?
+  metaDescription String?
+  status          PublishStatus @default(DRAFT)
+  sections        PageSection[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model PageSection {
+  id           String            @id @default(cuid())
+  pageId       String
+  sectionKey   String
+  sectionType  String
+  title        String
+  subtitle     String?
+  body         String?
+  sortOrder    Int               @default(0)
+  isPublished  Boolean           @default(true)
+  settingsJson Json?
+  page         Page              @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  items        PageSectionItem[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([pageId, sectionKey])
+}
+
+model PageSectionItem {
+  id           String      @id @default(cuid())
+  sectionId    String
+  title        String
+  subtitle     String?
+  body         String?
+  icon         String?
+  imagePath    String?
+  videoPath    String?
+  linkText     String?
+  linkUrl      String?
+  badge        String?
+  sortOrder    Int         @default(0)
+  settingsJson Json?
+  isPublished  Boolean     @default(true)
+  section      PageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
 model SiteSettings {
   id                String   @id @default(cuid())
   singletonKey      String   @unique @default("footer")
@@ -163,6 +248,8 @@ model HeroMedia {
   mediaType   String
   url         String
   alt         String
+  mimeType    String?
+  fileSize    Int?
   sortOrder   Int           @default(0)
   isPrimary   Boolean       @default(false)
   status      PublishStatus @default(PUBLISHED)
@@ -185,12 +272,25 @@ model Project {
   inverterBrandModel String?
   moduleBrandModel  String?
   imageUrls         Json?
+  images            ProjectImage[]
   videoUrl          String?
   annualGeneration  Decimal?
   annualSavingsBdt  Decimal?
   status            PublishStatus @default(PUBLISHED)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+}
+
+model ProjectImage {
+  id        String   @id @default(cuid())
+  projectId String
+  imagePath String
+  altText   String
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ImpactSnapshot {
@@ -232,8 +332,13 @@ model MonitoringIntegration {
   apiSecret    String?
   username     String?
   password     String?
+  plantMapping String?
+  syncFrequencyMinutes Int         @default(1440)
   isEnabled    Boolean             @default(false)
   lastSyncAt   DateTime?
+  lastSyncStatus String?
+  lastSyncMessage String?
+  errorLog     String?
   settings     Json?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
@@ -255,6 +360,7 @@ model ResourceArticle {
   excerpt      String
   body         String
   coverImage   String?
+  coverImageAlt String?
   status       PublishStatus    @default(DRAFT)
   categoryId   String
   authorId     String?

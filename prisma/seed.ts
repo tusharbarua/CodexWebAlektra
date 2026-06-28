@@ -1,5 +1,6 @@
-import { PrismaClient, PublishStatus, Role } from "@prisma/client";
+﻿import { PageKey, Prisma, PrismaClient, PublishStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { comprehensivePoints, standardPoints, thermalAnomalies } from "../src/data/thermal";
 
 const prisma = new PrismaClient();
 
@@ -16,6 +17,26 @@ async function main() {
       role: Role.SUPER_ADMIN
     }
   });
+
+  const permissionModules = ["Dashboard", "Pages", "Products", "Categories", "Orders", "Projects", "Resources", "Hero Media", "Footer Settings", "SEO", "Integrations", "Thermal Inspections", "Contact Submissions", "Users", "Roles", "Site Settings"];
+  const permissionActions = ["View", "Create", "Edit", "Delete", "Publish", "Export", "Manage Settings"];
+  const defaultRoles = ["Super Admin", "Director", "Admin", "Sales", "Engineer", "HR", "Accounts", "Store Manager", "Viewer"];
+  const roleRows = new Map<string, string>();
+  for (const roleName of defaultRoles) {
+    const role = await prisma.appRole.upsert({
+      where: { name: roleName },
+      update: { isSystem: ["Super Admin", "Admin", "Viewer"].includes(roleName) },
+      create: { name: roleName, isSystem: ["Super Admin", "Admin", "Viewer"].includes(roleName) }
+    });
+    roleRows.set(roleName, role.id);
+  }
+  const superAdminRoleId = roleRows.get("Super Admin")!;
+  await prisma.appRolePermission.deleteMany({ where: { roleId: superAdminRoleId } });
+  await prisma.appRolePermission.createMany({
+    data: permissionModules.flatMap((module) => permissionActions.map((action) => ({ roleId: superAdminRoleId, module, action })))
+  });
+  await prisma.user.update({ where: { id: admin.id }, data: { appRoleId: superAdminRoleId } });
+  await seedSubdivisionPages();
 
   await prisma.seoMetadata.upsert({
     where: { route: "/" },
@@ -376,6 +397,224 @@ async function main() {
   console.log("Seed completed for Alektra Renewable.");
 }
 
+async function seedSubdivisionPages() {
+  await seedThermalPage();
+  await seedSimpleSubdivision(PageKey.sparkle, "Alektra Sparkle", "sparkle", "Solar panel cleaning service", "Panel cleaning and surface care for operating solar assets.", "Alektra Sparkle helps solar owners maintain cleaner modules, reduce soiling losses and support consistent generation through professional cleaning workflows.");
+  await seedSimpleSubdivision(PageKey.mapping, "Alektra Mapping", "mapping", "Photogrammetry and digital mapping", "Aerial survey, mapping and asset documentation for renewable-energy sites.", "Alektra Mapping supports site planning, digital mapping, aerial survey and documentation for solar and infrastructure projects.");
+  await seedSimpleSubdivision(PageKey.epc, "Alektra EPC", "epc", "Solar EPC in Bangladesh", "Rooftop, industrial and commercial solar EPC.", "Alektra EPC designs, engineers, procures, installs and commissions solar plants with net metering and monitoring support.");
+}
+
+async function upsertPage(pageKey: PageKey, title: string, slug: string, metaTitle: string, metaDescription: string) {
+  return prisma.page.upsert({
+    where: { pageKey },
+    update: { title, slug, metaTitle, metaDescription, status: PublishStatus.PUBLISHED },
+    create: { pageKey, title, slug, metaTitle, metaDescription, status: PublishStatus.PUBLISHED }
+  });
+}
+
+async function upsertSection(pageId: string, data: {
+  sectionKey: string;
+  sectionType: string;
+  title: string;
+  subtitle?: string | null;
+  body?: string | null;
+  sortOrder: number;
+  isPublished?: boolean;
+  settingsJson?: Prisma.InputJsonValue;
+}) {
+  return prisma.pageSection.upsert({
+    where: { pageId_sectionKey: { pageId, sectionKey: data.sectionKey } },
+    update: data,
+    create: { pageId, ...data }
+  });
+}
+
+async function replaceItems(sectionId: string, items: Array<{
+  title: string;
+  subtitle?: string | null;
+  body?: string | null;
+  icon?: string | null;
+  imagePath?: string | null;
+  videoPath?: string | null;
+  linkText?: string | null;
+  linkUrl?: string | null;
+  badge?: string | null;
+  sortOrder: number;
+  settingsJson?: Prisma.InputJsonValue;
+  isPublished?: boolean;
+}>) {
+  const existing = await prisma.pageSectionItem.count({ where: { sectionId } });
+  if (existing > 0) return;
+  await prisma.pageSectionItem.createMany({
+    data: items.map((item) => ({ sectionId, isPublished: true, ...item }))
+  });
+}
+
+async function seedThermalPage() {
+  const page = await upsertPage(
+    PageKey.thermal,
+    "Alektra Thermal",
+    "thermal",
+    "Alektra Thermal | Deploying Proprietary Artificial Intelligence Software for Aerial Thermal Inspection of Solar PV Plants",
+    "Artificaly Intelligent Drone-based infrared and RGB inspection for rooftop and ground-mounted solar PV plants."
+  );
+
+  const hero = await upsertSection(page.id, {
+    sectionKey: "hero",
+    sectionType: "hero",
+    title: "Alektra Thermal",
+    subtitle: "AI-Assisted Drone Based Anomaly Detection and Digital Twin Mapping",
+    body: "Alektra Thermal combines high-resolution drone-based infrared imaging, RGB visual inspection, AI-powered analytics, and digital twin asset mapping to identify hidden faults across solar PV plants. From hot spots and bypass diode activation to string issues, soiling, shading, cracked modules, and underperforming zones, our inspection process helps asset owners, EPCs, and O&M teams detect problems faster, prioritize maintenance, and protect long-term energy generation. Each inspection can also create a digital twin reference of the client?s solar asset, enabling future comparison, lifecycle tracking, warranty support, and data-driven maintenance planning.",
+    sortOrder: 10,
+    settingsJson: {
+      kicker: "AI-Powered Aerial Thermal Intelligence & Digital Twin Asset Mapping",
+      primaryCtaText: "Request an Inspection",
+      primaryCtaLink: "#request",
+      secondaryCtaText: "Explore Detected Anomalies",
+      secondaryCtaLink: "#anomalies",
+      minimumNote: "Minimum thermal inspection site size:",
+      minimumValue: "50 kWp",
+      posterImage: "https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1800&q=80"
+    }
+  });
+  await replaceItems(hero.id, [{ title: "Thermal hero media", videoPath: "/videos/thermal-drone.mp4", sortOrder: 0 }]);
+
+  await upsertSection(page.id, {
+    sectionKey: "why-it-matters",
+    sectionType: "intro",
+    title: "See performance losses that remain hidden from the ground.",
+    subtitle: "Why it matters",
+    body: "Aerial inspection combines calibrated flight planning, infrared imagery and high-resolution RGB evidence to assess large PV sites quickly and consistently.\n\nThe result is a clearer maintenance priority list, fewer unnecessary truck rolls and stronger evidence for commissioning, warranty and due-diligence decisions.",
+    sortOrder: 20
+  });
+
+  const anomalies = await upsertSection(page.id, {
+    sectionKey: "anomalies",
+    sectionType: "anomaly-grid",
+    title: "Anomalies We Detect",
+    subtitle: "Inspection analytics",
+    body: "Our aerial thermal inspection identifies module, string, electrical, environmental and site-level anomalies that reduce solar plant performance.",
+    sortOrder: 30
+  });
+  await replaceItems(anomalies.id, thermalAnomalies.map(([title, body, severity, icon], index) => ({
+    title,
+    body,
+    badge: severity,
+    icon,
+    sortOrder: index,
+    settingsJson: {
+      category: index <= 2 ? "Module" : index <= 5 ? "Electrical" : index <= 7 ? "Module" : index <= 10 ? "Environmental" : "Site",
+      inspectionValue: "Thermal and RGB evidence helps the O&M team confirm priority and plan targeted field action."
+    }
+  })));
+
+  const packages = await upsertSection(page.id, {
+    sectionKey: "packages",
+    sectionType: "package-cards",
+    title: "Choose the detail level your asset requires",
+    subtitle: "Inspection packages",
+    body: "Both inspection levels combine aerial infrared and RGB capture with classified findings and maintenance priorities.",
+    sortOrder: 40
+  });
+  await replaceItems(packages.id, [
+    {
+      title: "Standard Level Inspection",
+      badge: "Standard",
+      body: standardPoints.join("\n"),
+      linkText: "Request an Inspection",
+      linkUrl: "#request",
+      sortOrder: 0,
+      settingsJson: {
+        tags: ["O&M inspection", "Commissioning", "EPC handover", "Preventive maintenance", "Portfolio benchmarking"],
+        featured: false
+      }
+    },
+    {
+      title: "Comprehensive Level Inspection",
+      badge: "Comprehensive",
+      body: comprehensivePoints.join("\n"),
+      linkText: "Request an Inspection",
+      linkUrl: "#request",
+      sortOrder: 1,
+      settingsJson: {
+        tags: ["Warranty claim", "Due diligence", "Bank/owner inspection", "Commissioning", "Underperformance diagnosis", "Detailed asset baseline"],
+        featured: true
+      }
+    }
+  ]);
+
+  const workflow = await upsertSection(page.id, {
+    sectionKey: "workflow",
+    sectionType: "workflow",
+    title: "From request to actionable maintenance priorities",
+    subtitle: "Inspection workflow",
+    body: "A structured process keeps flight capture, analysis and reporting consistent.",
+    sortOrder: 50
+  });
+  await replaceItems(workflow.id, [
+    ["Submit request", "Share site, module and capacity details.", "ClipboardCheck"],
+    ["Flight planning", "Define safe routes, altitude and data resolution.", "Plane"],
+    ["IR + RGB capture", "Collect thermal and color imagery across the asset.", "Crosshair"],
+    ["Anomaly classification", "Review patterns by type, severity and location.", "ScanLine"],
+    ["Digital Twin Creation + Report generation", "Our Proprietory Artifical Intelligent Software creates a Digital Twin and issues PDF record with evidence and findings.", "FileSearch"],
+    ["Maintenance support", "Prioritize field checks and corrective work.", "Check"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index, badge: String(index + 1) })));
+
+  await upsertSection(page.id, {
+    sectionKey: "request-form",
+    sectionType: "form-intro",
+    title: "Request a Thermal Inspection",
+    subtitle: "Inspection request",
+    body: "Tell us about the plant. PV capacity is calculated automatically from the module rows you provide.",
+    sortOrder: 60,
+    settingsJson: {
+      minimumNote: "Minimum thermal inspection site size: 50 kWp",
+      paymentNote: "Payment is not required during request submission.",
+      nextStepsNote: "Our team will review your request and contact you shortly."
+    }
+  });
+
+  const faq = await upsertSection(page.id, {
+    sectionKey: "faq",
+    sectionType: "faq",
+    title: "Thermal inspection questions",
+    subtitle: "FAQ",
+    body: "Essential details before requesting an inspection.",
+    sortOrder: 70
+  });
+  await replaceItems(faq.id, [
+    ["What is the minimum site size?", "Minimum thermal inspection site size is 50 kWp."],
+    ["What is the difference between Standard and Comprehensive inspection?", "Standard balances speed and useful sub-module detail for routine O&M. Comprehensive flies lower and slower for higher spatial detail, absolute temperature accuracy and warranty-grade investigation."],
+    ["Do you provide IEC-aligned inspection?", "The Comprehensive level is designed for detailed, IEC-aligned aerial infrared inspection requirements."],
+    ["What information do you need before inspection?", "Module model and quantity, DC and AC capacity, site location, access details and the inspection objective."],
+    ["Do you provide a PDF report?", "Yes. Requests receive a PDF confirmation, and completed inspections are documented with classified findings and supporting imagery."],
+    ["Can you inspect rooftop and ground-mounted PV plants?", "Yes. Flight planning is adapted to rooftop, industrial and ground-mounted plant conditions."],
+    ["Is payment required during request submission?", "Not by default. Payment may be requested later if enabled by admin."]
+  ].map(([title, body], index) => ({ title, body, sortOrder: index })));
+}
+
+async function seedSimpleSubdivision(pageKey: PageKey, title: string, slug: string, metaTitle: string, metaDescription: string, body: string) {
+  const page = await upsertPage(pageKey, title, slug, metaTitle, metaDescription);
+  const hero = await upsertSection(page.id, {
+    sectionKey: "hero",
+    sectionType: "simple-hero",
+    title,
+    subtitle: metaTitle,
+    body,
+    sortOrder: 10,
+    settingsJson: { primaryCtaText: "Contact Alektra", primaryCtaLink: "/#contact" }
+  });
+  await replaceItems(hero.id, []);
+  await upsertSection(page.id, {
+    sectionKey: "overview",
+    sectionType: "simple-content",
+    title: "Overview",
+    subtitle: "Editable subdivision content",
+    body,
+    sortOrder: 20
+  });
+}
+
 main()
   .catch((error) => {
     console.error(error);
@@ -384,3 +623,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
