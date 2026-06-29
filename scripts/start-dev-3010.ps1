@@ -6,9 +6,17 @@ $ErrorActionPreference = "Stop"
 
 $project = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $nodeDir = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
+$depsBin = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin"
+$pnpmCmd = Join-Path $depsBin "pnpm.cmd"
 
 if (Test-Path (Join-Path $nodeDir "node.exe")) {
   $env:PATH = "$nodeDir;$env:PATH"
+}
+
+if (Test-Path $pnpmCmd) {
+  $env:PATH = "$depsBin;$env:PATH"
+} else {
+  throw "pnpm.cmd was not found at $pnpmCmd"
 }
 
 $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
@@ -30,9 +38,9 @@ if (Test-Path $envPath) {
 
 Push-Location $project
 try {
-  pnpm exec prisma generate
-  pnpm exec prisma migrate deploy
-  pnpm exec next dev -H 127.0.0.1 -p $Port
+  & $pnpmCmd exec prisma generate
+  & $pnpmCmd exec prisma migrate deploy
+  & $pnpmCmd exec next dev -H 127.0.0.1 -p $Port
 } finally {
   Pop-Location
 }
