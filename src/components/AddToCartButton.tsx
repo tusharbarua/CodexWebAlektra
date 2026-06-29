@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ShoppingCart } from "lucide-react";
-import { addCartItem } from "@/lib/cart";
+import { addCartItem, openCartDrawer } from "@/lib/cart";
 
 type CartProduct = {
   id: string;
@@ -14,11 +14,12 @@ type CartProduct = {
   stock?: number;
 };
 
-export function AddToCartButton({ product, quantity = 1, compact = false, disabled = false }: { product: CartProduct; quantity?: number; compact?: boolean; disabled?: boolean }) {
+export function AddToCartButton({ product, quantity = 1, compact = false, disabled = false, openDrawerOnAdd = false }: { product: CartProduct; quantity?: number; compact?: boolean; disabled?: boolean; openDrawerOnAdd?: boolean }) {
   const [added, setAdded] = useState(false);
 
   function add() {
     addCartItem(product, quantity);
+    if (openDrawerOnAdd) openCartDrawer();
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1600);
   }

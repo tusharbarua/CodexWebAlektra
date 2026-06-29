@@ -302,8 +302,8 @@ async function main() {
         "50kW three-phase grid-tied inverter with multiple MPPT inputs, integrated protection and cloud monitoring readiness for industrial rooftops.",
       specifications: { acPower: "50kW", phase: "Three phase", monitoring: "Wi-Fi / LAN datalogger ready" }
     },
-    {
-      name: "Aluminium Rooftop Mounting Kit",
+      {
+        name: "Aluminium Rooftop Mounting Kit",
       slug: "aluminium-rooftop-mounting-kit",
       sku: "AL-MNT-ROOF-KIT",
       model: "RMK-CI",
@@ -315,9 +315,135 @@ async function main() {
       shortDescription: "Corrosion-resistant mounting kit for commercial rooftop PV arrays.",
       technicalDescription:
         "Modular aluminium rail, clamps and fastener package engineered for clean installation, service access and roof-appropriate anchoring.",
-      specifications: { material: "Anodized aluminium", application: "Rooftop", finish: "Corrosion resistant" }
-    }
-  ];
+        specifications: { material: "Anodized aluminium", application: "Rooftop", finish: "Corrosion resistant" }
+      },
+      {
+        name: "Alektra Mono PERC 550W Module",
+        slug: "alektra-mono-perc-550w-module",
+        sku: "AL-PV-550-PERC",
+        model: "AL550M",
+        brand: "Alektra Approved",
+        priceBdt: 16800,
+        stockQuantity: 120,
+        isFeatured: false,
+        category: "solar-module",
+        shortDescription: "Commercial mono PERC module for reliable rooftop solar output.",
+        technicalDescription: "550W mono PERC PV module selected for dependable C&I rooftop deployment, low degradation and strong mechanical reliability.",
+        specifications: { wattage: "550W", cellType: "Mono PERC", warranty: "12-year product warranty" }
+      },
+      {
+        name: "Hybrid Solar Inverter 10kW",
+        slug: "hybrid-solar-inverter-10kw",
+        sku: "AL-HYB-10K",
+        model: "HYB10K",
+        brand: "Alektra Approved",
+        priceBdt: 285000,
+        stockQuantity: 9,
+        isFeatured: true,
+        category: "hybrid-inverter",
+        shortDescription: "Hybrid inverter for PV, grid and battery-ready energy systems.",
+        technicalDescription: "10kW hybrid inverter with battery integration, backup support and smart monitoring for resilient solar systems.",
+        specifications: { acPower: "10kW", battery: "Lithium compatible", monitoring: "Wi-Fi ready" }
+      },
+      {
+        name: "Offgrid Inverter 5kW",
+        slug: "offgrid-inverter-5kw",
+        sku: "AL-OFF-5K",
+        model: "OFF5K",
+        brand: "Alektra Approved",
+        priceBdt: 145000,
+        stockQuantity: 16,
+        isFeatured: false,
+        category: "offgrid-inverter",
+        shortDescription: "Off-grid inverter for standalone solar backup applications.",
+        technicalDescription: "5kW off-grid inverter designed for battery-backed independent power systems and remote solar installations.",
+        specifications: { acPower: "5kW", phase: "Single phase", application: "Off-grid backup" }
+      },
+      {
+        name: "On Grid String Inverter 20kW",
+        slug: "on-grid-string-inverter-20kw",
+        sku: "AL-INV-20K-GT",
+        model: "GT20K",
+        brand: "Alektra Approved",
+        priceBdt: 225000,
+        stockQuantity: 18,
+        isFeatured: false,
+        category: "on-grid-inverter",
+        shortDescription: "Three-phase on-grid inverter for commercial rooftop systems.",
+        technicalDescription: "20kW grid-tied string inverter with MPPT optimization and protection functions for net-metered PV systems.",
+        specifications: { acPower: "20kW", phase: "Three phase", protection: "Integrated DC/AC protection" }
+      },
+      {
+        name: "Lithium Battery Pack 5.12kWh",
+        slug: "lithium-battery-pack-512kwh",
+        sku: "AL-BAT-5KWH",
+        model: "LFP5120",
+        brand: "Alektra Approved",
+        priceBdt: 185000,
+        stockQuantity: 14,
+        isFeatured: true,
+        category: "battery",
+        shortDescription: "LFP battery module for hybrid solar and backup systems.",
+        technicalDescription: "5.12kWh lithium iron phosphate battery pack with scalable installation support for hybrid and ESS-ready projects.",
+        specifications: { capacity: "5.12kWh", chemistry: "LFP", lifecycle: "6000 cycles class" }
+      },
+      {
+        name: "Solar DC Cable 6mm",
+        slug: "solar-dc-cable-6mm",
+        sku: "AL-CAB-DC6",
+        model: "PV1-F-6",
+        brand: "Alektra Approved",
+        priceBdt: 145,
+        stockQuantity: 1200,
+        isFeatured: false,
+        category: "cable",
+        shortDescription: "UV-resistant solar DC cable for PV string wiring.",
+        technicalDescription: "6mm solar DC cable suitable for rooftop and ground-mounted PV array wiring with outdoor-rated insulation.",
+        specifications: { size: "6mm", rating: "PV1-F", application: "DC string wiring" }
+      },
+      {
+        name: "MC4 Connector Pair",
+        slug: "mc4-connector-pair",
+        sku: "AL-BOS-MC4",
+        model: "MC4-PAIR",
+        brand: "Alektra Approved",
+        priceBdt: 280,
+        stockQuantity: 450,
+        isFeatured: false,
+        category: "balance-of-system-bos",
+        shortDescription: "PV connector pair for reliable module string connection.",
+        technicalDescription: "MC4-compatible connector pair for PV string installation and maintenance replacement work.",
+        specifications: { type: "MC4 compatible", rating: "PV DC", unit: "Pair" }
+      },
+      {
+        name: "DC Combiner Box 4 String",
+        slug: "dc-combiner-box-4-string",
+        sku: "AL-BOS-DC4",
+        model: "DCB-4S",
+        brand: "Alektra",
+        priceBdt: 18500,
+        stockQuantity: 24,
+        isFeatured: false,
+        category: "balance-of-system-bos",
+        shortDescription: "String combiner box with DC protection components.",
+        technicalDescription: "4-string DC combiner box for solar PV systems, designed for organized string protection and service access.",
+        specifications: { strings: "4", protection: "Fuse/SPD ready", application: "PV DC side" }
+      },
+      {
+        name: "Standing Seam Roof Clamp Set",
+        slug: "standing-seam-roof-clamp-set",
+        sku: "AL-MNT-SEAM",
+        model: "SSC-SET",
+        brand: "Alektra",
+        priceBdt: 9500,
+        stockQuantity: 80,
+        isFeatured: false,
+        category: "mounting-system",
+        shortDescription: "Clamp set for standing seam industrial rooftops.",
+        technicalDescription: "Non-penetrating standing seam roof clamp set for suitable industrial roof profiles and PV mounting layouts.",
+        specifications: { material: "Aluminium", roofType: "Standing seam", installation: "Non-penetrating" }
+      }
+    ];
 
   await prisma.siteSettings.upsert({
     where: { singletonKey: "footer" },
@@ -340,38 +466,53 @@ async function main() {
     }
   });
 
-  const seededProductImages = [
-    "/uploads/products/seed-solar-module.svg",
-    "/uploads/products/seed-inverter.svg",
-    "/uploads/products/seed-mounting.svg"
-  ];
+    const seededProductImages = [
+      "/uploads/products/seed-solar-module.svg",
+      "/uploads/products/seed-inverter.svg",
+      "/uploads/products/seed-mounting.svg"
+    ];
 
   for (const product of products) {
+    const seededFeatures = [
+      product.shortDescription,
+      `Model ${product.model}`,
+      `${product.brand} supply and after-sales coordination`
+    ];
+    const seededProductData = {
+      name: product.name,
+      slug: product.slug,
+      sku: product.sku,
+      model: product.model,
+      brand: product.brand,
+      priceBdt: product.priceBdt,
+      stockQuantity: product.stockQuantity,
+      isFeatured: product.isFeatured,
+      categoryId: legacyCategoryMap[product.category as keyof typeof legacyCategoryMap] ?? shopCategories.get(product.category)!,
+      status: PublishStatus.PUBLISHED,
+      shortDescription: product.shortDescription,
+      technicalDescription: product.technicalDescription,
+      keyFeatures: seededFeatures,
+      warrantyNote: "Warranty and service support available as per product category and supplier terms.",
+      supportNote: "Alektra can support product selection, installation planning and commissioning coordination.",
+      datasheetUrl: "/datasheets/request-from-admin.pdf",
+      manualUrl: "/manuals/request-from-admin.pdf",
+      specifications: product.specifications
+    };
     const created = await prisma.product.upsert({
       where: { slug: product.slug },
-      update: {},
-      create: {
-        name: product.name,
-        slug: product.slug,
-        sku: product.sku,
-        model: product.model,
-        brand: product.brand,
-        priceBdt: product.priceBdt,
-        stockQuantity: product.stockQuantity,
-        isFeatured: product.isFeatured,
-        categoryId: legacyCategoryMap[product.category as keyof typeof legacyCategoryMap] ?? shopCategories.get(product.category)!,
-        status: PublishStatus.PUBLISHED,
-        shortDescription: product.shortDescription,
-        technicalDescription: product.technicalDescription,
-        datasheetUrl: "/datasheets/request-from-admin.pdf",
-        manualUrl: "/manuals/request-from-admin.pdf",
-        specifications: product.specifications
-      }
+      update: seededProductData,
+      create: seededProductData
     });
 
     await prisma.productImage.deleteMany({ where: { productId: created.id } });
-    await prisma.productImage.createMany({
-      data: seededProductImages.map((imagePath, index) => ({
+      const primaryImage = product.category.includes("inverter")
+        ? "/uploads/products/seed-inverter.svg"
+        : product.category.includes("mounting")
+          ? "/uploads/products/seed-mounting.svg"
+          : "/uploads/products/seed-solar-module.svg";
+      const productImages = [primaryImage, ...seededProductImages.filter((imagePath) => imagePath !== primaryImage)];
+      await prisma.productImage.createMany({
+        data: productImages.map((imagePath, index) => ({
         productId: created.id,
         imagePath,
         altText: `${product.name} product image ${index + 1}`,

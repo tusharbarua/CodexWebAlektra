@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CART_UPDATED_EVENT, CartItem, cartSummary, readCart } from "@/lib/cart";
+import { CART_UPDATED_EVENT, CartItem, cartSummary, openCartDrawer, readCart } from "@/lib/cart";
 import { money } from "@/lib/format";
 
 export function FloatingCartBar() {
@@ -30,7 +29,7 @@ export function FloatingCartBar() {
       <ShoppingBag size={18} />
       <strong>{summary.quantity} item{summary.quantity === 1 ? "" : "s"}</strong>
       <span>{money(summary.total)}</span>
-      <Link href="/cart">View Cart</Link>
+      <button type="button" onClick={openCartDrawer}>View Cart</button>
     </div>
   );
 }

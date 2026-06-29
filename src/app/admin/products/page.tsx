@@ -12,33 +12,57 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
     prisma.productCategory.findMany({ orderBy: { name: "asc" } }),
     edit ? prisma.product.findUnique({ where: { id: edit }, include: { images: { orderBy: { sortOrder: "asc" } } } }) : null
   ]);
-  const specs = current ? Object.entries(current.specifications as Record<string, string>).map(([key, value]) => `${key}: ${value}`).join("\n") : "";
+  const currentSpecs = (current?.specifications ?? {}) as Record<string, string>;
+  const currentStockStatus = currentSpecs.availability ?? (current && current.stockQuantity <= 0 ? "Out of Stock" : "In Stock");
   return <div><p className="kicker">Products</p><h1>{current ? "Edit product" : "Product management"}</h1>
     {error ? <div className="admin-error">{decodeURIComponent(error)}</div> : null}
-    <form action={saveProduct} className="panel admin-form">
+    <form action={saveProduct} className="admin-product-form">
       <input type="hidden" name="id" value={current?.id ?? ""} />
-      <Field label="Product name" name="name" value={current?.name} required /><Field label="Slug" name="slug" value={current?.slug} required />
-      <Field label="SKU" name="sku" value={current?.sku} required /><Field label="Model" name="model" value={current?.model} required />
-      <Field label="Brand" name="brand" value={current?.brand} required />
-      <label className="field"><span>Category</span><select name="categoryId" defaultValue={current?.categoryId} required><option value="">Select category</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</select></label>
-      <Field label="Price (BDT)" name="priceBdt" type="number" value={current ? Number(current.priceBdt) : undefined} required />
-      <Field label="Stock quantity" name="stockQuantity" type="number" value={current?.stockQuantity} required />
-      <TextArea label="Short description" name="shortDescription" value={current?.shortDescription} required />
-      <TextArea label="Full technical description" name="technicalDescription" value={current?.technicalDescription} required />
-      <TextArea label="Specifications (one Key: Value per line)" name="specifications" value={specs} required />
-      <ProductImageManager existingImages={(current?.images ?? []).map((image) => ({
-        id: image.id,
-        imagePath: image.imagePath,
-        altText: image.altText,
-        sortOrder: image.sortOrder,
-        isPrimary: image.isPrimary
-      }))} />
-      <Field label="Datasheet URL" name="datasheetUrl" value={current?.datasheetUrl} /><Field label="Manual URL" name="manualUrl" value={current?.manualUrl} />
-      <label className="field"><span>Upload datasheet PDF</span><input name="datasheetFile" type="file" accept="application/pdf" /></label>
-      <label className="field"><span>Upload manual PDF</span><input name="manualFile" type="file" accept="application/pdf" /></label>
-      <label className="field"><span>Status</span><select name="status" defaultValue={current?.status ?? "DRAFT"}><option>DRAFT</option><option>PUBLISHED</option><option>UNPUBLISHED</option></select></label>
-      <label className="check-field"><input type="checkbox" name="isFeatured" defaultChecked={current?.isFeatured} /> Featured product</label>
-      <div className="admin-form-actions"><button className="btn" type="submit">{current ? "Save changes" : "Add product"}</button>{current ? <a className="btn secondary" href="/admin/products">Cancel</a> : null}</div>
+      <section className="admin-card admin-form-section">
+        <div className="admin-section-heading"><h2>Basic Information</h2><p>Core catalog details shown in the shop.</p></div>
+        <Field label="Product name" name="name" value={current?.name} required />
+        <label className="field"><span>Category <b>*</b></span><select name="categoryId" defaultValue={current?.categoryId} required><option value="">Select category or subcategory</option>{categories.map((category) => <option value={category.id} key={category.id}>{category.parentId ? "-- " : ""}{category.name}</option>)}</select></label>
+        <Field label="Brand / Manufacturer" name="brand" value={current?.brand} required />
+        <Field label="Model / SKU" name="sku" value={current?.sku} required />
+        <label className="field"><span>Product status <b>*</b></span><select name="status" defaultValue={current?.status ?? "DRAFT"}><option value="PUBLISHED">Published</option><option value="DRAFT">Draft</option><option value="UNPUBLISHED">Unpublished</option></select></label>
+        <label className="check-field admin-inline-check"><input type="checkbox" name="isFeatured" defaultChecked={current?.isFeatured} /> Featured product</label>
+      </section>
+
+      <section className="admin-card admin-form-section">
+        <div className="admin-section-heading"><h2>Pricing & Stock</h2><p>Inventory and buying status.</p></div>
+        <Field label="Price in BDT" name="priceBdt" type="number" value={current ? Number(current.priceBdt) : undefined} required />
+        <Field label="Stock quantity" name="stockQuantity" type="number" value={current?.stockQuantity} required />
+        <label className="field"><span>Stock status</span><select name="stockStatus" defaultValue={currentStockStatus}>
+          <option>In Stock</option>
+          <option>Out of Stock</option>
+          <option>Pre Order</option>
+          <option>Contact for Availability</option>
+        </select></label>
+      </section>
+
+      <section className="admin-card admin-form-section">
+        <div className="admin-section-heading"><h2>Description & Datasheet</h2><p>Keep product copy concise and customer-facing.</p></div>
+        <TextArea label="Short description" name="shortDescription" value={current?.shortDescription} required />
+        <TextArea label="Full description" name="technicalDescription" value={current?.technicalDescription} />
+        <TextArea label="Warranty note" name="warrantyNote" value={current?.warrantyNote} />
+        <Field label="Datasheet URL" name="datasheetUrl" value={current?.datasheetUrl} />
+        <Field label="Manual URL" name="manualUrl" value={current?.manualUrl} />
+        <label className="field"><span>Upload datasheet PDF</span><input name="datasheetFile" type="file" accept="application/pdf" /></label>
+        <label className="field"><span>Upload manual PDF</span><input name="manualFile" type="file" accept="application/pdf" /></label>
+      </section>
+
+      <section className="admin-card admin-form-section">
+        <div className="admin-section-heading"><h2>Product Images</h2><p>Upload at least one product image.</p></div>
+        <ProductImageManager existingImages={(current?.images ?? []).map((image) => ({
+          id: image.id,
+          imagePath: image.imagePath,
+          altText: image.altText,
+          sortOrder: image.sortOrder,
+          isPrimary: image.isPrimary
+        }))} />
+      </section>
+
+      <div className="admin-form-actions sticky-actions"><button className="btn" type="submit">{current ? "Save Product" : "Save Product"}</button><a className="btn secondary" href="/admin/products">Cancel</a></div>
     </form>
     <div className="admin-table-wrap"><table className="table"><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>
       {products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.sku}</td><td>{product.category.name}</td><td>{money(Number(product.priceBdt))}</td><td>{product.stockQuantity}</td><td>{product.status}</td><td className="table-actions"><a className="btn secondary compact" href={`/admin/products?edit=${product.id}`}>Edit</a><form action={deleteProduct}><input type="hidden" name="id" value={product.id} /><button className="btn danger compact">Delete</button></form></td></tr>)}
@@ -47,8 +71,8 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
 }
 
 function Field({ label, name, value, type = "text", required = false }: { label: string; name: string; value?: string | number | null; type?: string; required?: boolean }) {
-  return <label className="field"><span>{label}</span><input name={name} type={type} defaultValue={value ?? ""} required={required} /></label>;
+  return <label className="field"><span>{label}{required ? <b> *</b> : null}</span><input name={name} type={type} defaultValue={value ?? ""} required={required} /></label>;
 }
 function TextArea({ label, name, value, required = false }: { label: string; name: string; value?: string | null; required?: boolean }) {
-  return <label className="field wide"><span>{label}</span><textarea name={name} rows={4} defaultValue={value ?? ""} required={required} /></label>;
+  return <label className="field wide"><span>{label}{required ? <b> *</b> : null}</span><textarea name={name} rows={4} defaultValue={value ?? ""} required={required} /></label>;
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Battery, Cable, ChevronDown, CircuitBoard, Grid3X3, Layers3, PackageSearch, SlidersHorizontal, Sparkles, SunMedium, Zap } from "lucide-react";
 import { Prisma, PublishStatus } from "@prisma/client";
 import { ProductCard } from "@/components/ProductCard";
+import { ShopCartButton } from "@/components/ShopCartButton";
 import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -74,7 +75,39 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   return (
     <main className="shop-page-shell">
       <div className="shop-container">
-        <div className="shop-breadcrumb"><Link href="/">Home</Link><span>/</span><strong>Shop</strong></div>
+        <form className="shop-filter-bar">
+          <strong className="shop-toolbar-title">Shop</strong>
+          <input name="q" placeholder="Search product, SKU, brand or model" defaultValue={params.q} />
+          <select name="sort" defaultValue={params.sort ?? "latest"} aria-label="Sort products">
+            <option value="latest">Latest</option>
+            <option value="price-asc">Price low to high</option>
+            <option value="price-desc">Price high to low</option>
+            <option value="popular">Popular</option>
+            <option value="featured">Featured</option>
+            <option value="name-az">Name A-Z</option>
+          </select>
+          <select name="brand" defaultValue={params.brand ?? ""} aria-label="Brand filter">
+            <option value="">All brands</option>
+            {brands.map((item) => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
+          </select>
+          <select name="stock" defaultValue={params.stock ?? ""} aria-label="Stock filter">
+            <option value="">Any stock</option>
+            <option value="in-stock">In stock</option>
+            <option value="out-of-stock">Out of stock</option>
+          </select>
+          <input type="hidden" name="category" value={params.category ?? ""} />
+          <span className="shop-count-pill">{productCount} product{productCount === 1 ? "" : "s"}</span>
+          <button type="submit"><SlidersHorizontal size={16} /> Filter</button>
+          <ShopCartButton />
+        </form>
+
+        <div className="shop-mobile-chips">
+          <Link className={!params.category ? "active" : ""} href="/shop">All</Link>
+          {rootCategories.flatMap((category) => [category, ...category.children]).map((category) => (
+            <Link key={category.id} className={params.category === category.slug ? "active" : ""} href={categoryHref(category.slug, params)}>{category.name}</Link>
+          ))}
+        </div>
+
         <div className="shop-layout">
           <aside className="shop-sidebar" aria-label="Product categories">
             <div className="shop-sidebar-title">
@@ -102,44 +135,6 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
           </aside>
 
           <section className="shop-main-area">
-            <div className="shop-title-row">
-              <div>
-                <p className="kicker">Alektra Shop</p>
-                <h1>Solar equipment marketplace</h1>
-              </div>
-              <div className="shop-count-pill">{productCount} product{productCount === 1 ? "" : "s"}</div>
-            </div>
-
-            <form className="shop-filter-bar">
-              <input name="q" placeholder="Search product, SKU, brand or model" defaultValue={params.q} />
-              <select name="sort" defaultValue={params.sort ?? "latest"} aria-label="Sort products">
-                <option value="latest">Latest</option>
-                <option value="price-asc">Price low to high</option>
-                <option value="price-desc">Price high to low</option>
-                <option value="popular">Popular</option>
-                <option value="featured">Featured</option>
-                <option value="name-az">Name A-Z</option>
-              </select>
-              <select name="brand" defaultValue={params.brand ?? ""} aria-label="Brand filter">
-                <option value="">All brands</option>
-                {brands.map((item) => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
-              </select>
-              <select name="stock" defaultValue={params.stock ?? ""} aria-label="Stock filter">
-                <option value="">Any stock</option>
-                <option value="in-stock">In stock</option>
-                <option value="out-of-stock">Out of stock</option>
-              </select>
-              <input type="hidden" name="category" value={params.category ?? ""} />
-              <button type="submit"><SlidersHorizontal size={16} /> Filter</button>
-            </form>
-
-            <div className="shop-mobile-chips">
-              <Link className={!params.category ? "active" : ""} href="/shop">All</Link>
-              {rootCategories.flatMap((category) => [category, ...category.children]).map((category) => (
-                <Link key={category.id} className={params.category === category.slug ? "active" : ""} href={categoryHref(category.slug, params)}>{category.name}</Link>
-              ))}
-            </div>
-
             {products.length ? (
               <div className={params.view === "list" ? "shop-compact-list" : "shop-product-grid"}>
                 {products.map((product) => <ProductCard key={product.id} product={{

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
-import { FloatingCartBar } from "@/components/FloatingCartBar";
+import { headers } from "next/headers";
+import { PublicChrome } from "@/components/PublicChrome";
 import { getFooterSettings } from "@/lib/site-settings";
 import "./globals.css";
 
@@ -25,14 +24,13 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const footerSettings = await getFooterSettings();
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isAdminRoute = pathname.startsWith("/admin");
+  const footerSettings = isAdminRoute ? null : await getFooterSettings();
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <Header />
-        {children}
-        <FloatingCartBar />
-        <Footer settings={footerSettings} />
+        <PublicChrome footerSettings={footerSettings}>{children}</PublicChrome>
       </body>
     </html>
   );

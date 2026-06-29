@@ -54,21 +54,46 @@ function productError(message: string, productId?: string): never {
   redirect(target);
 }
 
+function slugifyProduct(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || `product-${Date.now()}`;
+}
+
+function firstProductValidationMessage(error: z.ZodError) {
+  const flattened = error.flatten().fieldErrors;
+  const labels: Record<string, string> = {
+    name: "Product name is required.",
+    sku: "SKU/model is required.",
+    brand: "Brand / manufacturer is required.",
+    categoryId: "Category is required.",
+    priceBdt: "Price must be a valid number greater than or equal to 0.",
+    stockQuantity: "Stock quantity must be a valid whole number greater than or equal to 0.",
+    shortDescription: "Short description is required.",
+    technicalDescription: "Full description must be valid text.",
+    status: "Product status is required."
+  };
+  const field = Object.keys(flattened).find((key) => flattened[key as keyof typeof flattened]?.length);
+  return field ? labels[field] ?? flattened[field as keyof typeof flattened]?.[0] ?? "Please check the highlighted product field." : "Please check the product form values.";
+}
+
 export async function saveProduct(formData: FormData) {
   await requireAdmin();
   const schema = z.object({
     id: z.string().optional(),
     name: z.string().min(2),
-    slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
     sku: z.string().min(2),
-    model: z.string().min(1),
+    model: z.string().optional(),
     brand: z.string().min(1),
     categoryId: z.string().min(1),
     priceBdt: z.coerce.number().nonnegative(),
     stockQuantity: z.coerce.number().int().nonnegative(),
     shortDescription: z.string().min(10),
-    technicalDescription: z.string().min(10),
-    specifications: z.string().min(2),
+    technicalDescription: z.string().optional(),
+    warrantyNote: z.string().optional(),
+    stockStatus: z.string().optional(),
     datasheetUrl: z.string().optional(),
     manualUrl: z.string().optional(),
     status: z.nativeEnum(PublishStatus)
@@ -80,7 +105,6 @@ export async function saveProduct(formData: FormData) {
     data = schema.parse({
     id: optional(formData.get("id")) ?? undefined,
     name: text(formData.get("name")),
-    slug: text(formData.get("slug")),
     sku: text(formData.get("sku")),
     model: text(formData.get("model")),
     brand: text(formData.get("brand")),
@@ -89,13 +113,14 @@ export async function saveProduct(formData: FormData) {
     stockQuantity: text(formData.get("stockQuantity")),
     shortDescription: text(formData.get("shortDescription")),
     technicalDescription: text(formData.get("technicalDescription")),
-    specifications: text(formData.get("specifications")),
+    warrantyNote: text(formData.get("warrantyNote")),
+    stockStatus: text(formData.get("stockStatus")),
     datasheetUrl: text(formData.get("datasheetUrl")),
     manualUrl: text(formData.get("manualUrl")),
     status: status(formData.get("status"))
     });
-  } catch {
-    productError("Please complete all required product fields with valid values.", productId);
+  } catch (error) {
+    productError(error instanceof z.ZodError ? firstProductValidationMessage(error) : "Please check the product form values.", productId);
   }
 
   const existingImages = data.id
@@ -104,7 +129,7 @@ export async function saveProduct(formData: FormData) {
   const deletedIds = new Set(formData.getAll("deleteImageId").map(String));
   const keptImages = existingImages.filter((image) => !deletedIds.has(image.id));
   if (keptImages.length + uploadedFiles.length < 1) {
-    productError("Upload at least 1 product image before saving.", data.id);
+    productError("Please upload at least one product image.", data.id);
   }
 
   for (const file of uploadedFiles) {
@@ -127,32 +152,42 @@ export async function saveProduct(formData: FormData) {
     productError(error instanceof Error ? error.message : "Datasheet/manual upload failed.", data.id);
   }
 
-  const specifications = Object.fromEntries(
-    data.specifications.split(/\r?\n/).map((row) => {
-      const [key, ...rest] = row.split(":");
-      return [key.trim(), rest.join(":").trim()];
-    }).filter(([key, value]) => key && value)
-  );
+  const existingProduct = data.id ? await prisma.product.findUnique({ where: { id: data.id } }) : null;
+  const modelOrSku = data.model || data.sku;
+  const baseSlug = slugifyProduct(`${data.name} ${modelOrSku}`);
+  const slug = existingProduct?.slug ?? baseSlug;
+  const specifications = data.stockStatus ? { availability: data.stockStatus } : {};
   const productData = {
     name: data.name,
-    slug: data.slug,
+    slug,
     sku: data.sku,
-    model: data.model,
+    model: modelOrSku,
     brand: data.brand,
     categoryId: data.categoryId,
     priceBdt: data.priceBdt,
     stockQuantity: data.stockQuantity,
     shortDescription: data.shortDescription,
-    technicalDescription: data.technicalDescription,
+    technicalDescription: data.technicalDescription || data.shortDescription,
+    keyFeatures: [],
+    warrantyNote: data.warrantyNote || null,
+    supportNote: null,
     specifications,
     datasheetUrl,
     manualUrl,
     isFeatured: formData.get("isFeatured") === "on",
     status: data.status
   };
-  const product = data.id
-    ? await prisma.product.update({ where: { id: data.id }, data: productData })
-    : await prisma.product.create({ data: productData });
+  let product;
+  try {
+    product = data.id
+      ? await prisma.product.update({ where: { id: data.id }, data: productData })
+      : await prisma.product.create({ data: productData });
+  } catch (error) {
+    const message = error instanceof Error && error.message.includes("Unique constraint")
+      ? "A product with this SKU/model or generated slug already exists."
+      : "Product could not be saved. Please check the form values.";
+    productError(message, data.id);
+  }
 
   const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
   if (imagesToDelete.length) {

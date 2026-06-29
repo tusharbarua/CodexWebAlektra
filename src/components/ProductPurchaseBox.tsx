@@ -21,7 +21,7 @@ export function ProductPurchaseBox({ product }: ProductPurchaseBoxProps) {
   return (
     <div className="product-purchase-box">
       <label className="field"><span>Quantity</span><input type="number" min={1} max={max} value={quantity} onChange={(event) => setQuantity(Math.max(1, Math.min(max, Number(event.target.value) || 1)))} /></label>
-      <AddToCartButton product={product} quantity={quantity} disabled={max <= 0} />
+      <AddToCartButton product={product} quantity={quantity} disabled={max <= 0} openDrawerOnAdd />
     </div>
   );
 }

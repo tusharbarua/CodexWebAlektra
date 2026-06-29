@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth, isAdminRole } from "@/lib/auth";
+import { auth, isAdminRole, signOut } from "@/lib/auth";
 
 const groups = [
   { label: "Overview", links: [["Dashboard", "/admin"]] },
-  { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Homepage Content", "/admin/content"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
-  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Coupons", "/admin/coupons"], ["Delivery Settings", "/admin/settings/delivery"]] },
-  { label: "Operations", links: [["Projects", "/admin/projects"], ["Resources", "/admin/resources"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Integrations", "/admin/integrations"], ["Messaging", "/admin/integrations/messaging"], ["Impact", "/admin/impact"]] },
-  { label: "People", links: [["Customers", "/admin/customers"], ["Contacts", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] }
+  { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
+  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Delivery Settings", "/admin/settings/delivery"]] },
+  { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["Thermal Inspections", "/admin/thermal-inspections"]] },
+  { label: "Integrations", links: [["API Integrations", "/admin/integrations"], ["Messaging API", "/admin/integrations/messaging"]] },
+  { label: "People", links: [["Contact Submissions", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] },
+  { label: "Settings", links: [["Impact Values", "/admin/impact"], ["Homepage Content", "/admin/content"], ["Coupons", "/admin/coupons"], ["Customers", "/admin/customers"]] }
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -32,8 +34,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </aside>
       <section className="admin-shell">
         <header className="admin-topbar">
-          <div><strong>Dashboard</strong><span>Manage Alektra website operations</span></div>
-          <div className="admin-user"><span>{user.email}</span><Link href="/">View site</Link></div>
+          <div><strong>Control Center</strong><span>Manage Alektra website, commerce and operations</span></div>
+          <div className="admin-user">
+            <span>{user.name || user.email}</span>
+            <Link href="/">View Website</Link>
+            <form action={async () => {
+              "use server";
+              await signOut({ redirectTo: "/admin/login" });
+            }}>
+              <button type="submit">Logout</button>
+            </form>
+          </div>
         </header>
         <div className="admin-main">{children}</div>
       </section>

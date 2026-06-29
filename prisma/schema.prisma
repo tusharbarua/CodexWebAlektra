@@ -407,6 +407,9 @@ model Product {
   status               PublishStatus   @default(DRAFT)
   shortDescription     String
   technicalDescription String
+  keyFeatures          Json?
+  warrantyNote         String?
+  supportNote          String?
   datasheetUrl         String?
   manualUrl            String?
   specifications       Json

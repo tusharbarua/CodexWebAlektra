@@ -11,6 +11,7 @@ export type CartItem = {
 
 export const CART_STORAGE_KEY = "alektra-cart";
 export const CART_UPDATED_EVENT = "alektra-cart-updated";
+export const CART_OPEN_EVENT = "alektra-cart-open";
 
 export function readCart(): CartItem[] {
   if (typeof window === "undefined") return [];
@@ -48,4 +49,9 @@ export function addCartItem(product: Omit<CartItem, "quantity">, quantity = 1) {
     : [...current, { ...product, quantity: Math.min(maxStock, Math.max(1, quantity)) }];
   writeCart(next);
   return next;
+}
+
+export function openCartDrawer() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(CART_OPEN_EVENT));
 }
