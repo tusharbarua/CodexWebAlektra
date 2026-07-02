@@ -18,6 +18,7 @@ export function SingleFilePreview({
   isVideo?: boolean;
 }) {
   const [preview, setPreview] = useState<string | null>(null);
+  const [previewIsVideo, setPreviewIsVideo] = useState(isVideo);
 
   return (
     <div className="field wide image-upload-field">
@@ -30,11 +31,12 @@ export function SingleFilePreview({
           if (preview) URL.revokeObjectURL(preview);
           const file = event.target.files?.[0];
           setPreview(file ? URL.createObjectURL(file) : null);
+          setPreviewIsVideo(file ? file.type.startsWith("video/") : isVideo);
         }}
       />
       {(preview || existingUrl) ? (
         <div className="admin-upload-preview">
-          {isVideo ? (
+          {previewIsVideo ? (
             <video src={preview ?? existingUrl ?? undefined} controls muted playsInline />
           ) : (
             <img src={preview ?? existingUrl ?? ""} alt="" />
@@ -44,4 +46,3 @@ export function SingleFilePreview({
     </div>
   );
 }
-

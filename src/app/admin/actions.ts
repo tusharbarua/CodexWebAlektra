@@ -9,6 +9,7 @@ import { auth, isAdminRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { deletePublicUpload, getFiles, saveUpload, uploadRules } from "@/lib/uploads";
 import { sendOrderNotifications } from "@/lib/notifications";
+import { getDatasetStats, searchBangladeshLocation } from "@/lib/bangladesh-location-service";
 
 async function requireAdmin() {
   const session = await auth();
@@ -631,13 +632,95 @@ export async function deleteContact(formData: FormData) {
 }
 
 export async function updateOrderStatus(formData: FormData) {
-  await requireAdmin();
+  const user = await requireAdmin();
   const data = z.object({
     id: z.string().min(1),
     status: z.nativeEnum(OrderStatus),
-    paymentStatus: z.nativeEnum(PaymentStatus)
-  }).parse({ id: text(formData.get("id")), status: text(formData.get("status")), paymentStatus: text(formData.get("paymentStatus")) });
-  await prisma.order.update({ where: { id: data.id }, data: { status: data.status, paymentStatus: data.paymentStatus } });
+    note: z.string().optional()
+  }).parse({ id: text(formData.get("id")), status: text(formData.get("status")), note: text(formData.get("note")) });
+  const current = await prisma.order.findUnique({ where: { id: data.id } });
+  if (!current) throw new Error("Order not found.");
+  const paymentStatus = data.status === OrderStatus.PAYMENT_CLEARED ? PaymentStatus.PAYMENT_CLEARED : current.paymentStatus;
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: data.id },
+      data: {
+        status: data.status,
+        paymentStatus,
+        notes: data.note ? [current.notes, data.note].filter(Boolean).join("\n\n") : current.notes
+      }
+    }),
+    prisma.orderStatusHistory.create({
+      data: {
+        orderId: data.id,
+        fromStatus: current.status,
+        toStatus: data.status,
+        paymentStatus,
+        note: data.note || null,
+        changedByUserId: user.id || null
+      }
+    })
+  ]);
+  refresh("/admin/orders");
+}
+
+export async function updateOrderPaymentStatus(formData: FormData) {
+  const user = await requireAdmin();
+  const data = z.object({
+    id: z.string().min(1),
+    paymentStatus: z.nativeEnum(PaymentStatus),
+    note: z.string().optional()
+  }).parse({ id: text(formData.get("id")), paymentStatus: text(formData.get("paymentStatus")), note: text(formData.get("note")) });
+  const current = await prisma.order.findUnique({ where: { id: data.id } });
+  if (!current) throw new Error("Order not found.");
+  const nextOrderStatus = data.paymentStatus === PaymentStatus.PAYMENT_CLEARED ? OrderStatus.PAYMENT_CLEARED : current.status;
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: data.id },
+      data: {
+        paymentStatus: data.paymentStatus,
+        status: nextOrderStatus,
+        notes: data.note ? [current.notes, data.note].filter(Boolean).join("\n\n") : current.notes
+      }
+    }),
+    prisma.orderStatusHistory.create({
+      data: {
+        orderId: data.id,
+        fromStatus: current.status,
+        toStatus: nextOrderStatus,
+        paymentStatus: data.paymentStatus,
+        note: data.note || null,
+        changedByUserId: user.id || null
+      }
+    })
+  ]);
+  refresh("/admin/orders");
+}
+
+export async function addOrderInternalNote(formData: FormData) {
+  const user = await requireAdmin();
+  const data = z.object({
+    id: z.string().min(1),
+    note: z.string().min(1)
+  }).parse({ id: text(formData.get("id")), note: text(formData.get("note")) });
+  const current = await prisma.order.findUnique({ where: { id: data.id } });
+  if (!current) throw new Error("Order not found.");
+  await prisma.$transaction([
+    prisma.order.update({
+      where: { id: data.id },
+      data: { notes: [current.notes, data.note].filter(Boolean).join("\n\n") }
+    }),
+    prisma.orderStatusHistory.create({
+      data: {
+        orderId: data.id,
+        fromStatus: current.status,
+        toStatus: current.status,
+        paymentStatus: current.paymentStatus,
+        note: data.note,
+        changedByUserId: user.id || null
+      }
+    })
+  ]);
   refresh("/admin/orders");
 }
 
@@ -722,53 +805,167 @@ export async function testMessagingIntegration(formData: FormData) {
   refresh("/admin/integrations/messaging");
 }
 
+export async function saveLocationDatasetSettings(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    cacheDurationMinutes: z.coerce.number().int().min(1).max(10080)
+  }).parse({
+    cacheDurationMinutes: text(formData.get("cacheDurationMinutes")) || "1440"
+  });
+  await prisma.locationDatasetSetting.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      providerName: "bangladesh-geojson",
+      providerType: "Local package/data",
+      cacheDurationMinutes: data.cacheDurationMinutes
+    },
+    create: {
+      singletonKey: "default",
+      providerName: "bangladesh-geojson",
+      providerType: "Local package/data",
+      cacheDurationMinutes: data.cacheDurationMinutes
+    }
+  });
+  refresh("/checkout", "/admin/integrations/location-api");
+  redirect("/admin/integrations/location-api?saved=1");
+}
+
+export async function testLocationDataset(formData: FormData) {
+  await requireAdmin();
+  const query = text(formData.get("testQuery")) || "Dhaka";
+  try {
+    const stats = getDatasetStats();
+    const results = searchBangladeshLocation(query);
+    const message = `Installed. ${stats.divisions} divisions, ${stats.districts} districts, ${stats.upazilas} upazilas, ${stats.postcodes} postcodes. Search "${query}" returned ${results.length} result(s).`;
+    await prisma.locationDatasetSetting.upsert({
+      where: { singletonKey: "default" },
+      update: {
+        providerName: "bangladesh-geojson",
+        providerType: "Local package/data",
+        lastTestAt: new Date(),
+        lastTestStatus: message,
+        lastErrorMessage: null,
+        lastSearchQuery: query,
+        lastSearchResultCount: results.length
+      },
+      create: {
+        singletonKey: "default",
+        providerName: "bangladesh-geojson",
+        providerType: "Local package/data",
+        lastTestAt: new Date(),
+        lastTestStatus: message,
+        lastSearchQuery: query,
+        lastSearchResultCount: results.length
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Location dataset test failed.";
+    await prisma.locationDatasetSetting.upsert({
+      where: { singletonKey: "default" },
+      update: { lastTestAt: new Date(), lastTestStatus: "Failed", lastErrorMessage: message },
+      create: {
+        singletonKey: "default",
+        providerName: "bangladesh-geojson",
+        providerType: "Local package/data",
+        lastTestAt: new Date(),
+        lastTestStatus: "Failed",
+        lastErrorMessage: message
+      }
+    });
+  }
+  refresh("/admin/integrations/location-api");
+}
+
+export async function refreshLocationDatasetCache() {
+  await requireAdmin();
+  const stats = getDatasetStats();
+  await prisma.locationDatasetSetting.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      providerName: "bangladesh-geojson",
+      providerType: "Local package/data",
+      lastTestAt: new Date(),
+      lastTestStatus: `Local dataset cache refreshed. ${stats.divisions} divisions, ${stats.districts} districts, ${stats.upazilas} upazilas, ${stats.postcodes} postcodes.`,
+      lastErrorMessage: null
+    },
+    create: {
+      singletonKey: "default",
+      providerName: "bangladesh-geojson",
+      providerType: "Local package/data",
+      lastTestAt: new Date(),
+      lastTestStatus: `Local dataset cache refreshed. ${stats.divisions} divisions, ${stats.districts} districts, ${stats.upazilas} upazilas, ${stats.postcodes} postcodes.`
+    }
+  });
+  refresh("/admin/integrations/location-api");
+}
+
 export async function saveHeroMedia(formData: FormData) {
   await requireAdmin();
   const data = z.object({
     id: z.string().optional(),
+    pageKey: z.nativeEnum(PageKey),
     title: z.string().min(2),
     mediaType: z.enum(["image", "video"]),
     url: z.string().optional(),
-    alt: z.string().min(2),
+    altText: z.string().min(2),
     sortOrder: z.coerce.number().int().default(0),
-    status: z.nativeEnum(PublishStatus)
+    isPublished: z.boolean(),
+    isPrimary: z.boolean()
   }).parse({
     id: optional(formData.get("id")) ?? undefined,
+    pageKey: text(formData.get("pageKey")) || PageKey.epc,
     title: text(formData.get("title")),
     mediaType: text(formData.get("mediaType")),
     url: text(formData.get("url")),
-    alt: text(formData.get("alt")),
+    altText: text(formData.get("altText")),
     sortOrder: text(formData.get("sortOrder")),
-    status: status(formData.get("status"))
+    isPublished: formData.get("isPublished") === "on",
+    isPrimary: formData.get("isPrimary") === "on"
   });
 
   const existing = data.id ? await prisma.heroMedia.findUnique({ where: { id: data.id } }) : null;
   const file = getFiles(formData, "mediaFile")[0];
-  let url = data.url || existing?.url || "";
+  const posterFile = getFiles(formData, "posterFile")[0];
+  let filePath = data.url || existing?.filePath || existing?.url || "";
+  let posterImagePath = existing?.posterImagePath ?? null;
   let mimeType = existing?.mimeType ?? null;
   let fileSize = existing?.fileSize ?? null;
   if (file) {
     const rules = data.mediaType === "video" ? uploadRules.heroVideo : uploadRules.adminImage;
     try {
-      const saved = await saveUpload(file, { kind: "hero", fallbackName: "hero-media", ...rules });
-      if (existing?.url) await deletePublicUpload(existing.url);
-      url = saved.url;
+      const saved = await saveUpload(file, { kind: "hero", subdir: data.pageKey, fallbackName: `${data.pageKey}-hero-media`, ...rules });
+      await deleteUniqueUploads(existing?.filePath, existing?.url);
+      filePath = saved.url;
       mimeType = saved.mimeType;
       fileSize = saved.size;
     } catch (error) {
-      redirect(`/admin/hero-media?error=${encodeURIComponent(error instanceof Error ? error.message : "Hero media upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
+      redirect(`/admin/hero-media?pageKey=${data.pageKey}&error=${encodeURIComponent(error instanceof Error ? error.message : "Hero media upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
     }
   }
-  if (!url) redirect(`/admin/hero-media?error=${encodeURIComponent("Upload a file or provide a media URL.")}${data.id ? `&edit=${data.id}` : ""}`);
+  if (posterFile) {
+    try {
+      const savedPoster = await saveUpload(posterFile, { kind: "hero", subdir: data.pageKey, fallbackName: `${data.pageKey}-hero-poster`, ...uploadRules.adminImage });
+      await deletePublicUpload(existing?.posterImagePath);
+      posterImagePath = savedPoster.url;
+    } catch (error) {
+      redirect(`/admin/hero-media?pageKey=${data.pageKey}&error=${encodeURIComponent(error instanceof Error ? error.message : "Poster upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
+    }
+  }
+  if (!filePath) redirect(`/admin/hero-media?pageKey=${data.pageKey}&error=${encodeURIComponent("Upload a file or provide a media URL.")}${data.id ? `&edit=${data.id}` : ""}`);
 
   const payload = {
+    pageKey: data.pageKey,
     title: data.title,
     mediaType: data.mediaType,
-    url,
-    alt: data.alt,
+    url: filePath,
+    filePath,
+    posterImagePath,
+    alt: data.altText,
+    altText: data.altText,
     sortOrder: data.sortOrder,
-    isPrimary: formData.get("isPrimary") === "on",
-    status: data.status,
+    isPrimary: data.isPrimary,
+    isPublished: data.isPublished,
+    status: data.isPublished ? PublishStatus.PUBLISHED : PublishStatus.UNPUBLISHED,
     mimeType,
     fileSize
   };
@@ -776,10 +973,10 @@ export async function saveHeroMedia(formData: FormData) {
     ? await prisma.heroMedia.update({ where: { id: data.id }, data: payload })
     : await prisma.heroMedia.create({ data: payload });
   if (payload.isPrimary) {
-    await prisma.heroMedia.updateMany({ where: { id: { not: media.id } }, data: { isPrimary: false } });
+    await prisma.heroMedia.updateMany({ where: { pageKey: data.pageKey, id: { not: media.id } }, data: { isPrimary: false } });
   }
-  refresh("/", "/admin/hero-media");
-  redirect("/admin/hero-media");
+  refresh(heroPagePath(data.pageKey), "/admin/hero-media");
+  redirect(`/admin/hero-media?pageKey=${data.pageKey}`);
 }
 
 export async function deleteHeroMedia(formData: FormData) {
@@ -787,8 +984,19 @@ export async function deleteHeroMedia(formData: FormData) {
   const id = z.string().parse(formData.get("id"));
   const media = await prisma.heroMedia.findUnique({ where: { id } });
   await prisma.heroMedia.delete({ where: { id } });
-  await deletePublicUpload(media?.url);
-  refresh("/", "/admin/hero-media");
+  await deleteUniqueUploads(media?.filePath, media?.url, media?.posterImagePath);
+  refresh(media ? heroPagePath(media.pageKey) : "/", "/admin/hero-media");
+}
+
+async function deleteUniqueUploads(...urls: Array<string | null | undefined>) {
+  for (const url of Array.from(new Set(urls.filter(Boolean)))) {
+    await deletePublicUpload(url);
+  }
+}
+
+function heroPagePath(pageKey: PageKey) {
+  if (pageKey === PageKey.epc) return "/";
+  return `/${pageKey}`;
 }
 
 export async function saveIntegration(formData: FormData) {

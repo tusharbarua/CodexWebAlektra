@@ -1,7 +1,9 @@
 import { ArrowDown, Check, ClipboardCheck, Crosshair, FileSearch, Plane, ScanLine } from "lucide-react";
 import { PageKey } from "@prisma/client";
+import { HeroMediaBackground } from "@/components/HeroMediaBackground";
 import { ThermalAnomalyGrid, type ThermalAnomaly } from "@/components/ThermalAnomalyGrid";
 import { ThermalInspectionForm } from "@/components/ThermalInspectionForm";
+import { getPrimaryHeroMedia } from "@/lib/hero-media";
 import { MarkdownBlock, getPublishedPage, lines, sectionByKey, settings } from "@/lib/page-cms";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +19,10 @@ export async function generateMetadata() {
 const workflowIcons = { ClipboardCheck, Plane, Crosshair, ScanLine, FileSearch, Check };
 
 export default async function ThermalPage() {
-  const page = await getPublishedPage(PageKey.thermal);
+  const [page, thermalHeroMedia] = await Promise.all([
+    getPublishedPage(PageKey.thermal),
+    getPrimaryHeroMedia(PageKey.thermal)
+  ]);
   const hero = sectionByKey(page, "hero");
   const heroSettings = settings(hero?.settingsJson, {
     kicker: "Drone-based IR + RGB intelligence",
@@ -29,7 +34,6 @@ export default async function ThermalPage() {
     minimumValue: "50 kWp",
     posterImage: "https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=1800&q=80"
   });
-  const heroMedia = hero?.items[0];
   const why = sectionByKey(page, "why-it-matters");
   const anomaliesSection = sectionByKey(page, "anomalies");
   const packageSection = sectionByKey(page, "packages");
@@ -51,9 +55,13 @@ export default async function ThermalPage() {
 
   return <main className="thermal-page">
     {hero ? <section className="thermal-hero">
-      <video className="thermal-hero-video" autoPlay muted loop playsInline poster={heroMedia?.imagePath ?? String(heroSettings.posterImage)}>
-        <source src={heroMedia?.videoPath ?? "/videos/thermal-drone.mp4"} type="video/mp4" />
-      </video>
+      <HeroMediaBackground
+        media={thermalHeroMedia}
+        videoClassName="thermal-hero-video"
+        imageClassName="thermal-hero-video"
+        fallbackVideoSrc="/videos/thermal-drone.mp4"
+        fallbackPosterImage={String(heroSettings.posterImage)}
+      />
       <div className="thermal-hero-overlay" />
       <div className="thermal-atmosphere" />
       <div className="container thermal-hero-content">
@@ -114,4 +122,3 @@ function Package({ title, badge, points, tags, ctaText, ctaLink, featured = fals
   return <article className={`thermal-package-card ${featured ? "featured" : ""}`}><span className="package-badge">{badge}</span><h3>{title}</h3><ul>{points.map((point) => <li key={point}><Check size={16}/>{point}</li>)}</ul><div className="thermal-tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div><a href={ctaLink} className="thermal-primary-button">{ctaText}</a></article>;
 }
 function Faq({ question, children }: { question: string; children: React.ReactNode }) { return <details><summary>{question}</summary><p>{children}</p></details>; }
-

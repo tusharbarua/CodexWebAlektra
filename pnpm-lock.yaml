@@ -14,6 +14,9 @@ importers:
       '@prisma/client':
         specifier: ^6.1.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
+      bangladesh-geojson:
+        specifier: github:ifahimreza/bangladesh-geojson
+        version: https://codeload.github.com/ifahimreza/bangladesh-geojson/tar.gz/4723ee5f9fecaa79af6266a746cf89c39841a02d
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -902,6 +905,10 @@ packages:
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
+
+  bangladesh-geojson@https://codeload.github.com/ifahimreza/bangladesh-geojson/tar.gz/4723ee5f9fecaa79af6266a746cf89c39841a02d:
+    resolution: {gitHosted: true, integrity: sha512-UsUMZt+lSJtaRl6o+WGfgcEiYkDbbhzc6w3gbt6fZtoyZWCtAJ+/TQVQrBbZudTy59MmUXAYTlT+2mhakycCFg==, tarball: https://codeload.github.com/ifahimreza/bangladesh-geojson/tar.gz/4723ee5f9fecaa79af6266a746cf89c39841a02d}
+    version: 1.0.0
 
   bcryptjs@2.4.3:
     resolution: {integrity: sha512-V/Hy/X9Vt7f3BbPJEi8BdVFMByHi+jNXrYkW3huaybV/kQ0KJg0Y6PkEMbn+zeT+i+SiKZ/HMqJGIIt4LZDqNQ==}
@@ -2773,6 +2780,8 @@ snapshots:
   balanced-match@1.0.2: {}
 
   balanced-match@4.0.4: {}
+
+  bangladesh-geojson@https://codeload.github.com/ifahimreza/bangladesh-geojson/tar.gz/4723ee5f9fecaa79af6266a746cf89c39841a02d: {}
 
   bcryptjs@2.4.3: {}
 

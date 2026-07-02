@@ -1,13 +1,18 @@
 import { createHash, randomInt } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { MOBILE_VALIDATION_MESSAGE, normalizeBangladeshMobile } from "@/lib/checkout-validation";
 import { prisma } from "@/lib/prisma";
 
-const schema = z.object({ mobile: z.string().trim().min(7) });
+const schema = z.object({ mobile: z.string().trim().min(1) });
 
 export async function POST(request: Request) {
   try {
-    const { mobile } = schema.parse(await request.json());
+    const parsed = schema.parse(await request.json());
+    const mobile = normalizeBangladeshMobile(parsed.mobile);
+    if (!mobile) {
+      return NextResponse.json({ error: MOBILE_VALIDATION_MESSAGE, fieldErrors: { customerPhone: MOBILE_VALIDATION_MESSAGE } }, { status: 400 });
+    }
     const recent = await prisma.otpVerification.findFirst({
       where: { mobile, purpose: "checkout", createdAt: { gt: new Date(Date.now() - 60_000) } },
       orderBy: { createdAt: "desc" }
@@ -36,7 +41,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, message: "OTP sent." });
   } catch (error) {
-    if (error instanceof z.ZodError) return NextResponse.json({ error: "Enter a valid mobile number." }, { status: 400 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: MOBILE_VALIDATION_MESSAGE, fieldErrors: { customerPhone: MOBILE_VALIDATION_MESSAGE } }, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not send OTP." }, { status: 400 });
   }
 }

@@ -1,18 +1,20 @@
-import { PublishStatus } from "@prisma/client";
+import { PageKey, PublishStatus } from "@prisma/client";
 import Link from "next/link";
 import { ArrowRight, BatteryCharging, Download, Play, ShieldCheck } from "lucide-react";
 import { ContactForm } from "@/components/ContactForm";
 import { ImpactDashboard } from "@/components/ImpactDashboard";
+import { HeroMediaBackground } from "@/components/HeroMediaBackground";
 import { ProductCard } from "@/components/ProductCard";
 import { SubdivisionTabs } from "@/components/SubdivisionTabs";
 import { brochureEnergyRows, whyChoose } from "@/data/site";
 import { money, numberFormat } from "@/lib/format";
+import { getPrimaryHeroMedia } from "@/lib/hero-media";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [impactRow, projects, articles, resourceCategories, products, contentRows] = await Promise.all([
+  const [impactRow, projects, articles, resourceCategories, products, contentRows, heroMedia] = await Promise.all([
     prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
     prisma.project.findMany({ where: { status: PublishStatus.PUBLISHED }, orderBy: { commissionedAt: "desc" }, take: 6 }),
     prisma.resourceArticle.findMany({
@@ -27,7 +29,8 @@ export default async function HomePage() {
       include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
       take: 3
     }),
-    prisma.siteContent.findMany({ where: { status: PublishStatus.PUBLISHED } })
+    prisma.siteContent.findMany({ where: { status: PublishStatus.PUBLISHED } }),
+    getPrimaryHeroMedia(PageKey.epc)
   ]);
   const content = new Map(contentRows.map((item) => [item.key, item]));
   const totalSavings = brochureEnergyRows.reduce((sum, row) => sum + Number(row[5]), 0);
@@ -42,7 +45,8 @@ export default async function HomePage() {
 
   return (
     <main>
-      <section className="hero">
+      <section className={`hero ${heroMedia ? "has-hero-media" : ""}`}>
+        <HeroMediaBackground media={heroMedia} />
         <div className="container hero-content">
           <span className="eyebrow">Alektra EPC | Bangladesh Solar Engineering</span>
           <h1>Alektra Renewable</h1>

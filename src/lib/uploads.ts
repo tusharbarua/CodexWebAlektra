@@ -37,6 +37,7 @@ export async function saveUpload(
     allowedTypes: Set<string>;
     maxBytes: number;
     fallbackName: string;
+    subdir?: string;
   }
 ): Promise<SavedUpload> {
   if (!options.allowedTypes.has(file.type)) {
@@ -54,11 +55,12 @@ export async function saveUpload(
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "") || options.fallbackName;
   const fileName = `${baseName}-${randomUUID()}.${extension}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads", options.kind);
+  const safeSubdir = options.subdir ? options.subdir.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") : "";
+  const uploadDir = path.join(process.cwd(), "public", "uploads", options.kind, safeSubdir);
   await mkdir(uploadDir, { recursive: true });
   await writeFile(path.join(uploadDir, fileName), Buffer.from(await file.arrayBuffer()));
   return {
-    url: `/uploads/${options.kind}/${fileName}`,
+    url: `/uploads/${options.kind}/${safeSubdir ? `${safeSubdir}/` : ""}${fileName}`,
     mimeType: file.type,
     size: file.size,
     originalName: file.name
@@ -68,10 +70,12 @@ export async function saveUpload(
 export async function deletePublicUpload(url?: string | null) {
   if (!url?.startsWith("/uploads/")) return;
   const parts = url.split("/").filter(Boolean);
-  if (parts.length !== 3) return;
-  const [, kind, fileName] = parts;
+  if (parts.length < 3 || parts.length > 4) return;
+  const [, kind, maybeSubdir, maybeFileName] = parts;
+  const fileName = maybeFileName ?? maybeSubdir;
+  const subdir = maybeFileName ? maybeSubdir : "";
   try {
-    await unlink(path.join(process.cwd(), "public", "uploads", kind, path.basename(fileName)));
+    await unlink(path.join(process.cwd(), "public", "uploads", kind, subdir ? path.basename(subdir) : "", path.basename(fileName)));
   } catch {
     // Missing files should not block admin edits.
   }

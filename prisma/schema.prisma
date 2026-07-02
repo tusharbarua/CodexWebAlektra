@@ -26,12 +26,17 @@ enum OrderStatus {
   NEW
   CONFIRMED
   PROCESSING
+  BOOKED_FOR_SHIPPING
+  HANDED_TO_COURIER
+  PRODUCT_RECEIVED
+  PAYMENT_CLEARED
   READY_FOR_PICKUP
   SHIPPED
   DELIVERED
   COMPLETED
   CANCELLED
   REFUNDED
+  RETURNED_ISSUE
 }
 
 enum PaymentMethod {
@@ -42,8 +47,10 @@ enum PaymentMethod {
 enum PaymentStatus {
   UNPAID
   CASH_ON_DELIVERY
+  PENDING
   INITIATED
   PAID
+  PAYMENT_CLEARED
   FAILED
   CANCELLED
   REFUNDED
@@ -95,6 +102,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   orders        Order[]
+  orderStatusChanges OrderStatusHistory[]
   articles      ResourceArticle[] @relation("ArticleAuthor")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -248,17 +256,24 @@ model SiteSettings {
 
 model HeroMedia {
   id          String        @id @default(cuid())
+  pageKey     PageKey       @default(epc)
   title       String
   mediaType   String
   url         String
+  filePath    String?
+  posterImagePath String?
   alt         String
+  altText     String?
   mimeType    String?
   fileSize    Int?
   sortOrder   Int           @default(0)
   isPrimary   Boolean       @default(false)
+  isPublished Boolean       @default(true)
   status      PublishStatus @default(PUBLISHED)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  @@index([pageKey, isPublished, isPrimary, sortOrder])
 }
 
 model Project {
@@ -488,6 +503,21 @@ model MessagingIntegration {
   updatedAt                DateTime @updatedAt
 }
 
+model LocationDatasetSetting {
+  id                   String    @id @default(cuid())
+  singletonKey         String    @unique @default("default")
+  providerName         String    @default("bangladesh-geojson")
+  providerType         String    @default("Local package/data")
+  cacheDurationMinutes Int       @default(1440)
+  lastTestStatus       String?
+  lastErrorMessage     String?
+  lastSearchQuery      String?
+  lastSearchResultCount Int      @default(0)
+  lastTestAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+}
+
 model OtpVerification {
   id          String    @id @default(cuid())
   mobile      String
@@ -544,10 +574,26 @@ model Order {
   items           OrderItem[]
   transactions    PaymentTransaction[]
   notifications   NotificationLog[]
+  statusHistory   OrderStatusHistory[]
   user            User?         @relation(fields: [userId], references: [id])
   coupon          Coupon?       @relation(fields: [couponId], references: [id])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+}
+
+model OrderStatusHistory {
+  id              String       @id @default(cuid())
+  orderId         String
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
+  paymentStatus   PaymentStatus?
+  note            String?
+  changedByUserId String?
+  createdAt       DateTime     @default(now())
+  order           Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy       User?        @relation(fields: [changedByUserId], references: [id])
+
+  @@index([orderId, createdAt])
 }
 
 model OrderItem {

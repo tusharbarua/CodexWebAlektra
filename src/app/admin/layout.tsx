@@ -7,7 +7,7 @@ const groups = [
   { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
   { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Delivery Settings", "/admin/settings/delivery"]] },
   { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["Thermal Inspections", "/admin/thermal-inspections"]] },
-  { label: "Integrations", links: [["API Integrations", "/admin/integrations"], ["Messaging API", "/admin/integrations/messaging"]] },
+  { label: "Integrations", links: [["API Integrations", "/admin/integrations"], ["Messaging API", "/admin/integrations/messaging"], ["Location Dataset", "/admin/integrations/location-api"]] },
   { label: "People", links: [["Contact Submissions", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] },
   { label: "Settings", links: [["Impact Values", "/admin/impact"], ["Homepage Content", "/admin/content"], ["Coupons", "/admin/coupons"], ["Customers", "/admin/customers"]] }
 ];

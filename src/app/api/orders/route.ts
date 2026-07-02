@@ -2,21 +2,38 @@ import { NextResponse } from "next/server";
 import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { EMAIL_VALIDATION_MESSAGE, MOBILE_VALIDATION_MESSAGE, OTP_REQUIRED_MESSAGE, normalizeBangladeshMobile } from "@/lib/checkout-validation";
 import { initiateSslCommerz, sslCommerzEnabled } from "@/lib/sslcommerz";
 import { sendOrderNotifications } from "@/lib/notifications";
 
+const optionalEmailSchema = z.preprocess(
+  (value) => typeof value === "string" && !value.trim() ? undefined : value,
+  z.string().trim().email(EMAIL_VALIDATION_MESSAGE).optional()
+);
+
 const checkoutSchema = z.object({
   customerName: z.string().trim().min(2),
-  customerEmail: z.string().trim().email().optional(),
-  customerPhone: z.string().trim().min(7),
+  customerEmail: optionalEmailSchema,
+  customerPhone: z.string().trim().min(1),
   companyName: z.string().trim().optional(),
   address: z.object({
     line1: z.string().trim().optional(),
-    line2: z.string().trim().optional(),
+    addressLine: z.string().trim().optional(),
+    divisionId: z.string().trim().optional(),
+    divisionName: z.string().trim().optional(),
+    districtId: z.string().trim().optional(),
+    districtName: z.string().trim().optional(),
+    upazilaId: z.string().trim().optional(),
+    upazilaName: z.string().trim().optional(),
+    thanaName: z.string().trim().optional(),
+    postOffice: z.string().trim().optional(),
     district: z.string().trim().optional(),
     city: z.string().trim().optional(),
     postalCode: z.string().trim().optional(),
-    pickupAddress: z.string().trim().optional()
+    deliveryNotes: z.string().trim().optional(),
+    pickupAddress: z.string().trim().optional(),
+    manualAddressFallback: z.boolean().optional(),
+    locationSource: z.string().trim().optional()
   }),
   deliveryMethod: z.enum(["COURIER", "PICKUP"]),
   deliveryNotes: z.string().trim().optional(),
@@ -25,9 +42,18 @@ const checkoutSchema = z.object({
   items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() })).min(1)
 });
 
+class CheckoutValidationError extends Error {
+  constructor(public fieldErrors: Record<string, string>, message = "Please fix the highlighted fields before placing your order.") {
+    super(message);
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    const body = checkoutSchema.parse(await request.json());
+    const parsed = checkoutSchema.parse(await request.json());
+    const normalizedMobile = normalizeBangladeshMobile(parsed.customerPhone);
+    if (!normalizedMobile) throw new CheckoutValidationError({ customerPhone: MOBILE_VALIDATION_MESSAGE });
+    const body = { ...parsed, customerPhone: normalizedMobile };
     if (body.paymentMethod === PaymentMethod.SSLCOMMERZ && !sslCommerzEnabled()) {
       throw new Error("SSLCommerz credentials are not configured. Please choose cash on delivery.");
     }
@@ -35,11 +61,9 @@ export async function POST(request: Request) {
       where: { mobile: body.customerPhone, purpose: "checkout", verifiedAt: { not: null }, expiresAt: { gt: new Date() } },
       orderBy: { verifiedAt: "desc" }
     });
-    if (!verifiedOtp) throw new Error("Verify your mobile number by OTP before confirming the order.");
+    if (!verifiedOtp) throw new CheckoutValidationError({ otp: OTP_REQUIRED_MESSAGE });
     if (body.deliveryMethod === "COURIER") {
-      if (!body.address.line1 || !body.address.district || !body.address.city) {
-        throw new Error("Shipping address, district and city are required for courier delivery.");
-      }
+      validateCourierAddress(body.address);
     }
 
     const productIdentifiers = body.items.map((item) => item.productId);
@@ -68,6 +92,7 @@ export async function POST(request: Request) {
       : `${deliverySettings?.pickupLabel ?? "Pick up from our warehouse"} at ${deliverySettings?.pickupAddress ?? "Khulshi, Chattogram"}`;
     const total = Math.max(subtotal - discount + deliveryCharge, 0);
     const orderNumber = await nextOrderNumber();
+    const orderAddress = normalizeOrderAddress(body.address, body.deliveryMethod);
 
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.order.create({
@@ -78,8 +103,8 @@ export async function POST(request: Request) {
           customerPhone: body.customerPhone,
           companyName: body.companyName || null,
           verifiedMobile: body.customerPhone,
-          billingAddress: body.address,
-          shippingAddress: body.deliveryMethod === "PICKUP" ? { pickupAddress: deliverySettings?.pickupAddress ?? "Khulshi, Chattogram" } : body.address,
+          billingAddress: orderAddress,
+          shippingAddress: orderAddress,
           deliveryMethod: body.deliveryMethod,
           deliveryLabel,
           deliveryNotes: body.deliveryNotes || null,
@@ -134,8 +159,66 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true, orderNumber: order.orderNumber, redirectUrl: payment.redirectUrl });
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({
+        error: "Please fix the highlighted fields before placing your order.",
+        fieldErrors: checkoutFieldErrors(error)
+      }, { status: 400 });
+    }
+    if (error instanceof CheckoutValidationError) {
+      return NextResponse.json({ error: error.message, fieldErrors: error.fieldErrors }, { status: 400 });
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : "Checkout failed." }, { status: 400 });
   }
+}
+
+function checkoutFieldErrors(error: z.ZodError) {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const field = issue.path[0]?.toString();
+    if (!field) continue;
+    if (field === "customerEmail") fieldErrors.customerEmail = EMAIL_VALIDATION_MESSAGE;
+    else if (field === "customerPhone") fieldErrors.customerPhone = MOBILE_VALIDATION_MESSAGE;
+    else if (field === "customerName") fieldErrors.customerName = "Please enter your full name.";
+    else if (field === "items") fieldErrors.items = "Your cart is empty. Please add at least one product before checkout.";
+    else if (field === "address") {
+      const addressField = issue.path[1]?.toString();
+      if (addressField === "addressLine" || addressField === "line1") fieldErrors.addressLine = "Please enter your detailed delivery address.";
+      if (addressField === "divisionName" || addressField === "divisionId") fieldErrors.divisionId = "Please select your division.";
+      if (addressField === "districtName" || addressField === "districtId" || addressField === "district") fieldErrors.districtId = "Please select your district.";
+      if (addressField === "upazilaName" || addressField === "upazilaId" || addressField === "city") fieldErrors.upazilaId = "Please select your upazila/thana.";
+    }
+  }
+  return fieldErrors;
+}
+
+function validateCourierAddress(address: z.infer<typeof checkoutSchema>["address"]) {
+  const addressLine = address.addressLine || address.line1;
+  const fieldErrors: Record<string, string> = {};
+  if (!addressLine) fieldErrors.addressLine = "Please enter your detailed delivery address.";
+
+  if (address.manualAddressFallback) {
+    if (!address.divisionName) fieldErrors.manualDivision = "Please select your division.";
+    if (!address.districtName && !address.district) fieldErrors.manualDistrict = "Please select your district.";
+    if (!address.upazilaName && !address.city) fieldErrors.manualUpazila = "Please select your upazila/thana.";
+  } else {
+    if (!address.divisionId || !address.divisionName) fieldErrors.divisionId = "Please select your division.";
+    if (!address.districtId || !address.districtName) fieldErrors.districtId = "Please select your district.";
+    if (!address.upazilaId || !address.upazilaName) fieldErrors.upazilaId = "Please select your upazila/thana.";
+  }
+
+  if (Object.keys(fieldErrors).length) throw new CheckoutValidationError(fieldErrors);
+}
+
+function normalizeOrderAddress(address: z.infer<typeof checkoutSchema>["address"], deliveryMethod: "COURIER" | "PICKUP") {
+  if (deliveryMethod === "PICKUP") return { pickupAddress: address.pickupAddress ?? "Khulshi, Chattogram", manualAddressFallback: false, locationSource: "warehouse-pickup" };
+  return {
+    ...address,
+    locationSource: "bangladesh-geojson",
+    line1: address.addressLine || address.line1 || "",
+    district: address.districtName || address.district || "",
+    city: address.upazilaName || address.city || ""
+  };
 }
 
 function validateCoupon(coupon: Awaited<ReturnType<typeof prisma.coupon.findUnique>>, subtotal: number) {
