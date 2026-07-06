@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { FocusEventHandler } from "react";
 import { AlertCircle, CheckCircle2, CreditCard, MessageSquareText } from "lucide-react";
 import { CartItem, CART_UPDATED_EVENT, cartSummary, readCart, writeCart } from "@/lib/cart";
+import { PolicyFormattedText } from "@/components/PolicyFormattedText";
 import {
   CHECKOUT_WARNING_BODY,
   CHECKOUT_WARNING_TITLE,
@@ -23,6 +24,21 @@ type DeliverySettings = {
   pickupLabel: string;
   pickupAddress: string;
   pickupChargeBdt: number;
+};
+
+type CheckoutSettings = {
+  requireOtpVerification: boolean;
+};
+
+type LegalSettings = {
+  termsVersion: string;
+  termsTitle: string;
+  termsContent: string;
+  termsEffectiveDate: string | null;
+  refundPolicyVersion: string;
+  refundTitle: string;
+  refundContent: string;
+  refundEffectiveDate: string | null;
 };
 
 type CheckoutErrors = Record<string, string>;
@@ -65,7 +81,15 @@ type SelectedLocation = {
   postalCode: string;
 };
 
-export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliverySettings }) {
+export function CheckoutForm({
+  deliverySettings,
+  checkoutSettings,
+  legalSettings
+}: {
+  deliverySettings: DeliverySettings;
+  checkoutSettings: CheckoutSettings;
+  legalSettings: LegalSettings;
+}) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState<CheckoutErrors>({});
@@ -85,6 +109,7 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loadingLocation, setLoadingLocation] = useState<Record<string, boolean>>({});
+  const [legalModal, setLegalModal] = useState<"terms" | "refund" | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation>({
     divisionId: "",
     divisionName: "",
@@ -98,6 +123,7 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
   const subtotal = useMemo(() => cartSummary(items).total, [items]);
   const deliveryCharge = deliveryMethod === "COURIER" ? deliverySettings.courierMinimumChargeBdt : deliverySettings.pickupChargeBdt;
   const total = subtotal + deliveryCharge;
+  const otpRequired = checkoutSettings.requireOtpVerification;
   const formRef = useRef<HTMLFormElement>(null);
   const validationSummaryRef = useRef<HTMLDivElement>(null);
 
@@ -140,6 +166,24 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
       cancelled = true;
     };
   }, [deliveryMethod, manualAddressFallback, divisions.length]);
+
+  useEffect(() => {
+    if (!legalModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLegalModal(null);
+      if (event.key === "Tab") trapModalFocus(event);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>(".checkout-legal-modal button, .checkout-legal-modal [href], .checkout-legal-modal [tabindex]:not([tabindex='-1'])")?.focus();
+    }, 60);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [legalModal]);
 
   async function loadDistricts(divisionId: string) {
     if (!divisionId) return;
@@ -359,6 +403,9 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
       deliveryMethod,
       deliveryNotes: form.get("deliveryNotes") || undefined,
       address: shippingAddress,
+      termsAccepted: form.get("termsAccepted") === "on",
+      termsVersion: legalSettings.termsVersion,
+      refundPolicyVersion: legalSettings.refundPolicyVersion,
       items: items.map((item) => ({ productId: item.id, quantity: item.quantity }))
     };
     const response = await fetch("/api/orders", {
@@ -402,7 +449,8 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
     if (!isValidOptionalEmail(email)) nextErrors.customerEmail = EMAIL_VALIDATION_MESSAGE;
     const mobileError = validateMobile(mobile);
     if (mobileError) nextErrors.customerPhone = mobileError;
-    if (!otpVerified) nextErrors.otp = OTP_REQUIRED_MESSAGE;
+    if (otpRequired && !otpVerified) nextErrors.otp = OTP_REQUIRED_MESSAGE;
+    if (String(form.get("termsAccepted") ?? "") !== "on") nextErrors.termsAccepted = "Please accept the Shop Terms & Conditions and Refund Policy before placing your order.";
     if (!items.length) nextErrors.items = "Your cart is empty. Please add at least one product before checkout.";
     if (deliveryMethod === "COURIER") {
       if (manualAddressFallback) {
@@ -486,6 +534,23 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
     return `${postcode.postOffice}__${postcode.postCode}`;
   }
 
+  function trapModalFocus(event: KeyboardEvent) {
+    const modal = document.querySelector<HTMLElement>(".checkout-legal-modal");
+    if (!modal) return;
+    const focusable = Array.from(modal.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"))
+      .filter((element) => !element.hasAttribute("disabled"));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="checkout-layout">
       <form ref={formRef} className="panel checkout-form" onSubmit={submit} noValidate>
@@ -513,7 +578,7 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
                 onChange={(event) => {
                   setMobile(event.target.value);
                   setOtpVerified(false);
-                  updateError("otp", OTP_REQUIRED_MESSAGE);
+                  if (otpRequired) updateError("otp", OTP_REQUIRED_MESSAGE);
                   if (errors.customerPhone) updateError("customerPhone", validateMobile(event.target.value));
                 }}
                 required
@@ -523,14 +588,14 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
             <Field label="Email address (optional)" name="customerEmail" inputMode="email" error={errors.customerEmail} onBlur={(event) => updateError("customerEmail", isValidOptionalEmail(event.currentTarget.value) ? "" : EMAIL_VALIDATION_MESSAGE)} />
             <Field label="Institution / company (optional)" name="companyName" />
           </div>
-          <div className={`otp-panel ${errors.otp ? "field-invalid" : ""}`}>
+          {otpRequired ? <div className={`otp-panel ${errors.otp ? "field-invalid" : ""}`}>
             <button className="btn secondary compact" type="button" onClick={sendOtp} disabled={sendingOtp || mobile.length < 7}><MessageSquareText size={15} />Send OTP</button>
             <input value={otp} onChange={(event) => setOtp(event.target.value)} placeholder="6 digit OTP" inputMode="numeric" maxLength={6} />
             <button className="btn secondary compact" type="button" onClick={verifyOtp} disabled={otp.length !== 6}>Verify</button>
             {otpVerified ? <span className="verified-pill"><CheckCircle2 size={14} />Verified</span> : null}
             {otpMessage ? <p>{otpMessage}</p> : null}
             {errors.otp ? <p className="field-error">{errors.otp}</p> : null}
-          </div>
+          </div> : <p className="field-help">OTP verification is currently not required. Please enter a valid mobile number for order coordination.</p>}
         </section>
 
         <section>
@@ -625,7 +690,14 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
           <label className="field"><span>Payment</span><select name="paymentMethod" defaultValue="CASH_ON_DELIVERY"><option value="CASH_ON_DELIVERY">Cash on delivery</option><option value="SSLCOMMERZ">SSLCommerz</option></select></label>
         </section>
 
-        <button className="btn wide checkout-submit" type="submit" disabled={!items.length}>
+        <label className={`check-field checkout-legal-acceptance ${errors.termsAccepted ? "field-invalid" : ""}`}>
+          <input name="termsAccepted" type="checkbox" onChange={(event) => updateError("termsAccepted", event.currentTarget.checked ? "" : "Please accept the Shop Terms & Conditions and Refund Policy before placing your order.")} />
+          <span>I agree to Alektra Renewable <button className="checkout-policy-link" type="button" onClick={() => setLegalModal("terms")}>Shop Terms & Conditions</button> and <button className="checkout-policy-link" type="button" onClick={() => setLegalModal("refund")}>Refund Policy</button>.</span>
+          {errors.termsAccepted ? <small className="field-error">{errors.termsAccepted}</small> : null}
+        </label>
+
+        {otpRequired && !otpVerified ? <p className="field-help">Verify your mobile number with OTP to enable order confirmation.</p> : null}
+        <button className="btn wide checkout-submit" type="submit" disabled={!items.length || (otpRequired && !otpVerified)}>
           <CreditCard size={18} />
           Confirm order
         </button>
@@ -644,6 +716,48 @@ export function CheckoutForm({ deliverySettings }: { deliverySettings: DeliveryS
         <div className="checkout-total-row"><span>Delivery</span><strong>{money(deliveryCharge)}</strong></div>
         <div className="checkout-total-row grand"><span>Total payable</span><strong>{money(total)}</strong></div>
       </aside>
+      {legalModal ? (
+        <LegalPolicyModal
+          type={legalModal}
+          legalSettings={legalSettings}
+          onClose={() => setLegalModal(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function LegalPolicyModal({
+  type,
+  legalSettings,
+  onClose
+}: {
+  type: "terms" | "refund";
+  legalSettings: LegalSettings;
+  onClose: () => void;
+}) {
+  const isTerms = type === "terms";
+  const title = isTerms ? legalSettings.termsTitle : legalSettings.refundTitle;
+  const version = isTerms ? legalSettings.termsVersion : legalSettings.refundPolicyVersion;
+  const effectiveDate = isTerms ? legalSettings.termsEffectiveDate : legalSettings.refundEffectiveDate;
+  const content = (isTerms ? legalSettings.termsContent : legalSettings.refundContent).trim();
+  const modalTitleId = `checkout-${type}-modal-title`;
+  return (
+    <div className="checkout-legal-modal-overlay" onMouseDown={onClose}>
+      <section className="checkout-legal-modal" role="dialog" aria-modal="true" aria-labelledby={modalTitleId} onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <p className="kicker">Shop Legal</p>
+            <h2 id={modalTitleId}>{title}</h2>
+            <span>Version {version}{effectiveDate ? ` · Effective ${new Date(effectiveDate).toLocaleDateString("en-GB")}` : ""}</span>
+          </div>
+          <button className="checkout-legal-modal-close" type="button" onClick={onClose} aria-label="Close policy modal">×</button>
+        </header>
+        <div className="checkout-legal-modal-body"><PolicyFormattedText content={content} /></div>
+        <footer>
+          <button className="btn checkout-legal-understand" type="button" onClick={onClose}>I Understand</button>
+        </footer>
+      </section>
     </div>
   );
 }

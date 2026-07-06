@@ -39,6 +39,9 @@ const checkoutSchema = z.object({
   deliveryNotes: z.string().trim().optional(),
   paymentMethod: z.nativeEnum(PaymentMethod),
   couponCode: z.string().trim().optional(),
+  termsAccepted: z.boolean().optional(),
+  termsVersion: z.string().trim().optional(),
+  refundPolicyVersion: z.string().trim().optional(),
   items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() })).min(1)
 });
 
@@ -57,11 +60,22 @@ export async function POST(request: Request) {
     if (body.paymentMethod === PaymentMethod.SSLCOMMERZ && !sslCommerzEnabled()) {
       throw new Error("SSLCommerz credentials are not configured. Please choose cash on delivery.");
     }
-    const verifiedOtp = await prisma.otpVerification.findFirst({
-      where: { mobile: body.customerPhone, purpose: "checkout", verifiedAt: { not: null }, expiresAt: { gt: new Date() } },
-      orderBy: { verifiedAt: "desc" }
-    });
-    if (!verifiedOtp) throw new CheckoutValidationError({ otp: OTP_REQUIRED_MESSAGE });
+    const [checkoutSettings, terms, refund] = await Promise.all([
+      prisma.ecommerceCheckoutSetting.findUnique({ where: { singletonKey: "default" } }).catch(() => null),
+      prisma.shopLegalContent.findUnique({ where: { policyKey: "terms" } }).catch(() => null),
+      prisma.shopLegalContent.findUnique({ where: { policyKey: "refund" } }).catch(() => null)
+    ]);
+    const otpRequired = checkoutSettings?.requireOtpVerification ?? false;
+    const verifiedOtp = otpRequired
+      ? await prisma.otpVerification.findFirst({
+        where: { mobile: body.customerPhone, purpose: "checkout", verifiedAt: { not: null }, expiresAt: { gt: new Date() } },
+        orderBy: { verifiedAt: "desc" }
+      })
+      : null;
+    if (otpRequired && !verifiedOtp) throw new CheckoutValidationError({ otp: OTP_REQUIRED_MESSAGE });
+    if (!body.termsAccepted) {
+      throw new CheckoutValidationError({ termsAccepted: "Please accept the Shop Terms & Conditions and Refund Policy before placing your order." });
+    }
     if (body.deliveryMethod === "COURIER") {
       validateCourierAddress(body.address);
     }
@@ -101,8 +115,12 @@ export async function POST(request: Request) {
           customerName: body.customerName,
           customerEmail: body.customerEmail || null,
           customerPhone: body.customerPhone,
+          customerMobileNumber: body.customerPhone,
           companyName: body.companyName || null,
-          verifiedMobile: body.customerPhone,
+          verifiedMobile: verifiedOtp ? body.customerPhone : null,
+          verifiedMobileNumber: verifiedOtp ? body.customerPhone : null,
+          otpRequiredAtCheckout: otpRequired,
+          otpVerified: Boolean(verifiedOtp),
           billingAddress: orderAddress,
           shippingAddress: orderAddress,
           deliveryMethod: body.deliveryMethod,
@@ -116,6 +134,10 @@ export async function POST(request: Request) {
           paymentMethod: body.paymentMethod,
           paymentStatus: body.paymentMethod === PaymentMethod.CASH_ON_DELIVERY ? PaymentStatus.CASH_ON_DELIVERY : PaymentStatus.INITIATED,
           couponId: coupon?.id,
+          termsAccepted: true,
+          termsAcceptedAt: new Date(),
+          termsVersion: terms?.version ?? body.termsVersion ?? "v1.0",
+          refundPolicyVersion: refund?.version ?? body.refundPolicyVersion ?? "v1.0",
           items: {
             create: body.items.map((item) => {
               const product = products.find((candidate) => [candidate.id, candidate.slug, candidate.sku].includes(item.productId))!;

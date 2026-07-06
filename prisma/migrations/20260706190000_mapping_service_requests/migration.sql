@@ -1,0 +1,30 @@
+CREATE TABLE "MappingServiceRequest" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "requestNumber" TEXT NOT NULL,
+    "serviceType" TEXT NOT NULL,
+    "projectSiteType" TEXT NOT NULL,
+    "projectSize" TEXT NOT NULL,
+    "preferredMethod" TEXT NOT NULL,
+    "requiredDeliverables" JSONB NOT NULL,
+    "divisionId" TEXT,
+    "divisionName" TEXT,
+    "districtId" TEXT,
+    "districtName" TEXT,
+    "upazilaId" TEXT,
+    "upazilaName" TEXT,
+    "postOffice" TEXT,
+    "postalCode" TEXT,
+    "addressLine" TEXT NOT NULL,
+    "manualAddressFallback" BOOLEAN NOT NULL DEFAULT false,
+    "institutionName" TEXT NOT NULL,
+    "contactPerson" TEXT NOT NULL,
+    "email" TEXT,
+    "contactNumber" TEXT NOT NULL,
+    "additionalNotes" TEXT,
+    "internalNotes" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'NEW',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+CREATE UNIQUE INDEX "MappingServiceRequest_requestNumber_key" ON "MappingServiceRequest"("requestNumber");

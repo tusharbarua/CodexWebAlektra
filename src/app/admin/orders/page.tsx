@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BarChart3, CalendarDays, CircleDollarSign, PackageCheck, PackageOpen, Send, Truck } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { money } from "@/lib/format";
-import { addOrderInternalNote, resendOrderNotifications, updateOrderPaymentStatus, updateOrderStatus } from "@/app/admin/actions";
+import { addOrderInternalNote, resendOrderConfirmationEmail, resendOrderNotifications, updateOrderPaymentStatus, updateOrderStatus } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -187,7 +187,7 @@ function OrderDetail({ current, params }: { current: Prisma.OrderGetPayload<{ in
     <div className="admin-two-column order-detail-grid">
       <div>
         <h3>Customer and delivery</h3>
-        <p><strong>Verified mobile:</strong> {current.verifiedMobile ?? current.customerPhone}<br/><strong>Email:</strong> {current.customerEmail ?? "Not provided"}<br/><strong>Company:</strong> {current.companyName ?? "Not provided"}<br/><strong>Delivery:</strong> {current.deliveryLabel ?? current.deliveryMethod}<br/><strong>OTP:</strong> {current.verifiedMobile ? "Verified" : "Not verified"}<br/><strong>Notes:</strong> {current.deliveryNotes ?? "None"}</p>
+        <p><strong>Customer mobile:</strong> {current.customerMobileNumber ?? current.customerPhone}<br/><strong>Verified mobile:</strong> {current.verifiedMobileNumber ?? current.verifiedMobile ?? "Not verified"}<br/><strong>Email:</strong> {current.customerEmail ?? "Not provided"}<br/><strong>Company:</strong> {current.companyName ?? "Not provided"}<br/><strong>Delivery:</strong> {current.deliveryLabel ?? current.deliveryMethod}<br/><strong>OTP required:</strong> {current.otpRequiredAtCheckout ? "Yes" : "No"}<br/><strong>OTP verified:</strong> {current.otpVerified ? "Yes" : "No"}<br/><strong>Terms accepted:</strong> {current.termsAccepted ? "Yes" : "No"}<br/><strong>Terms version:</strong> {current.termsVersion ?? "Not recorded"}<br/><strong>Refund policy version:</strong> {current.refundPolicyVersion ?? "Not recorded"}<br/><strong>Notes:</strong> {current.deliveryNotes ?? "None"}</p>
         <OrderAddress address={current.shippingAddress} />
         <h3>Items</h3>
         <table className="table compact-table"><tbody>{current.items.map((item) => <tr key={item.id}><td>{item.name}<br/><small>{item.sku}</small></td><td>{item.quantity}</td><td>{money(Number(item.lineTotalBdt))}</td></tr>)}</tbody></table>
@@ -214,6 +214,7 @@ function OrderDetail({ current, params }: { current: Prisma.OrderGetPayload<{ in
         <div className="admin-form-actions">
           <a className="btn secondary compact" href={`/api/admin/orders/${current.id}/invoice`} target="_blank">Print invoice</a>
           <form action={resendOrderNotifications}><input type="hidden" name="id" value={current.id} /><button className="btn secondary compact" type="submit"><Send size={14}/> Resend SMS/email</button></form>
+          <form action={resendOrderConfirmationEmail}><input type="hidden" name="id" value={current.id} /><button className="btn secondary compact" type="submit"><Send size={14}/> Resend order email</button></form>
         </div>
       </div>
     </div>
@@ -226,7 +227,7 @@ function OrderDetail({ current, params }: { current: Prisma.OrderGetPayload<{ in
       </div>
       <div>
         <h3>Notifications</h3>
-        <p>Confirmation SMS: {current.smsStatus}<br/>Confirmation email: {current.emailStatus}</p>
+        <p>Confirmation SMS: {current.smsStatus}<br/>Confirmation email: {current.emailStatus}<br/>Email sent time: {current.emailSentAt?.toLocaleString("en-GB") ?? "Not sent"}<br/>Payment instruction sent: {current.paymentInstructionSent ? "Yes" : "No"}{current.emailLastError ? <><br/>Email error: {current.emailLastError}</> : null}</p>
         {current.notifications.map((notification) => <p className="notification-log-row" key={notification.id}><strong>{notification.channel}</strong> {notification.status} to {notification.recipient}<br/><small>{notification.message}</small></p>)}
       </div>
     </div>

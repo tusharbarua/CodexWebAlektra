@@ -14,16 +14,26 @@ const schema = z.object({
   inspectionType: z.enum(["STANDARD", "COMPREHENSIVE"]),
   modules: z.array(moduleSchema).min(1),
   acCapacityKw: z.coerce.number().nonnegative(),
-  projectLocation: z.string().trim().min(3),
-  locationMode: z.enum(["google", "manual"]).default("manual"),
+  projectLocation: z.string().trim().optional(),
+  locationMode: z.enum(["google", "manual"]).optional(),
+  divisionId: z.string().trim().optional(),
+  divisionName: z.string().trim().optional(),
+  districtId: z.string().trim().optional(),
+  districtName: z.string().trim().optional(),
+  upazilaId: z.string().trim().optional(),
+  upazilaName: z.string().trim().optional(),
+  postOffice: z.string().trim().optional(),
+  postalCode: z.string().trim().optional(),
   projectLocationName: z.string().trim().optional(),
   projectFormattedAddress: z.string().trim().optional(),
   googlePlaceId: z.string().trim().optional(),
-  manualAddressFallback: z.string().trim().optional(),
+  manualAddressFallback: z.coerce.boolean().default(false),
+  manualDistrictArea: z.string().trim().optional(),
   latitude: z.union([z.string(), z.number()]).optional(),
   longitude: z.union([z.string(), z.number()]).optional(),
   institutionName: z.string().trim().min(2),
-  address: z.string().trim().min(4),
+  address: z.string().trim().optional(),
+  addressLine: z.string().trim().optional(),
   email: z.string().trim().email(),
   contactNumber: z.string().trim().min(7),
   additionalNotes: z.string().trim().max(4000).optional(),
@@ -39,34 +49,48 @@ export async function POST(request: Request) {
     if (elapsed < 3000) return NextResponse.json({ error: "Please take a moment to review the request before submitting." }, { status: 400 });
     if (body.mathAnswer !== 11) return NextResponse.json({ error: "The math answer is incorrect." }, { status: 400 });
     const pvCapacityKwp = body.modules.reduce((sum, module) => sum + module.capacityWp * module.quantity, 0) / 1000;
-    if (pvCapacityKwp < 50) return NextResponse.json({ error: "Minimum thermal inspection site size is 50 kWp." }, { status: 400 });
+    if (pvCapacityKwp < 50) return NextResponse.json({ error: "Minimum Thermal inspection request size is 50 kWp." }, { status: 400 });
     const latitude = numeric(body.latitude);
     const longitude = numeric(body.longitude);
     if ((latitude !== null && (latitude < -90 || latitude > 90)) || (longitude !== null && (longitude < -180 || longitude > 180))) {
-      return NextResponse.json({ error: "Selected Google location has invalid coordinates." }, { status: 400 });
+      return NextResponse.json({ error: "Submitted coordinates are invalid." }, { status: 400 });
     }
-    if (body.locationMode === "google") {
-      if (!body.googlePlaceId) return NextResponse.json({ error: "Please select a suggested Google location." }, { status: 400 });
-      if (!body.projectFormattedAddress) return NextResponse.json({ error: "Selected Google location is missing a formatted address." }, { status: 400 });
-      if (latitude === null || longitude === null) return NextResponse.json({ error: "Selected Google location is missing valid coordinates." }, { status: 400 });
-    } else if (!body.projectLocation && !body.manualAddressFallback) {
-      return NextResponse.json({ error: "Enter the project location manually." }, { status: 400 });
+
+    const addressLine = (body.addressLine || body.address || "").trim();
+    if (addressLine.length < 4) {
+      return NextResponse.json({ error: "Please enter your detailed address." }, { status: 400 });
     }
-    const distance = await calculateThermalDistance(latitude, longitude);
+
+    let locationLabel = "";
+    if (body.manualAddressFallback) {
+      locationLabel = body.manualDistrictArea || "";
+      if (!locationLabel) {
+        return NextResponse.json({ error: "Please enter your detailed address." }, { status: 400 });
+      }
+    } else {
+      if (!body.divisionId || !body.divisionName || !body.districtId || !body.districtName || !body.upazilaId || !body.upazilaName) {
+        return NextResponse.json({ error: "Please select division, district and upazila/thana." }, { status: 400 });
+      }
+      locationLabel = [body.upazilaName, body.districtName, body.divisionName].filter(Boolean).join(", ");
+    }
+
+    const distance = latitude !== null && longitude !== null
+      ? await calculateThermalDistance(latitude, longitude)
+      : { distanceFromBaseKm: null, distanceCalculationStatus: "missing_project_coordinates" as const };
     const requestNumber = `ATH-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase()}`;
     let inspection = await prisma.thermalInspectionRequest.create({
       data: {
         requestNumber, inspectionType: body.inspectionType, moduleDetails: body.modules, pvCapacityKwp,
         acCapacityKw: body.acCapacityKw,
-        projectLocation: body.projectFormattedAddress || body.projectLocation,
-        projectLocationName: body.projectLocationName || null,
-        projectFormattedAddress: body.projectFormattedAddress || null,
+        projectLocation: body.projectFormattedAddress || body.projectLocation || locationLabel,
+        projectLocationName: body.projectLocationName || locationLabel || null,
+        projectFormattedAddress: body.projectFormattedAddress || [addressLine, locationLabel].filter(Boolean).join(", ") || null,
         googlePlaceId: body.googlePlaceId || null,
-        manualAddressFallback: body.manualAddressFallback || null,
+        manualAddressFallback: body.manualAddressFallback ? locationLabel : null,
         latitude, longitude,
         distanceFromBaseKm: distance.distanceFromBaseKm,
         distanceCalculationStatus: distance.distanceCalculationStatus,
-        institutionName: body.institutionName, address: body.address, email: body.email,
+        institutionName: body.institutionName, address: addressLine, email: body.email,
         contactNumber: body.contactNumber, additionalNotes: body.additionalNotes || null
       }
     });

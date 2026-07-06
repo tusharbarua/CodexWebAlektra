@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { deletePublicUpload, getFiles, saveUpload, uploadRules } from "@/lib/uploads";
 import { sendOrderNotifications } from "@/lib/notifications";
 import { getDatasetStats, searchBangladeshLocation } from "@/lib/bangladesh-location-service";
+import { sendOrderConfirmationEmail, testSmtpConnection } from "@/lib/mail";
 
 async function requireAdmin() {
   const session = await auth();
@@ -733,6 +734,32 @@ export async function resendOrderNotifications(formData: FormData) {
   refresh("/admin/orders");
 }
 
+export async function resendOrderConfirmationEmail(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().parse(formData.get("id"));
+  try {
+    const result = await sendOrderConfirmationEmail(id);
+    await prisma.order.update({
+      where: { id },
+      data: {
+        emailStatus: result.skipped ? result.status : "SENT",
+        emailSentAt: result.skipped ? undefined : new Date(),
+        emailLastError: null,
+        paymentInstructionSent: result.skipped ? undefined : true
+      }
+    });
+  } catch (error) {
+    await prisma.order.update({
+      where: { id },
+      data: {
+        emailStatus: "FAILED",
+        emailLastError: error instanceof Error ? error.message : "Email failed."
+      }
+    });
+  }
+  refresh("/admin/orders");
+}
+
 export async function saveDeliverySettings(formData: FormData) {
   await requireAdmin();
   const data = z.object({
@@ -755,6 +782,100 @@ export async function saveDeliverySettings(formData: FormData) {
   });
   refresh("/checkout", "/admin/settings/delivery");
   redirect("/admin/settings/delivery?saved=1");
+}
+
+export async function saveCheckoutSettings(formData: FormData) {
+  await requireAdmin();
+  await prisma.ecommerceCheckoutSetting.upsert({
+    where: { singletonKey: "default" },
+    update: { requireOtpVerification: formData.get("requireOtpVerification") === "on" },
+    create: { singletonKey: "default", requireOtpVerification: formData.get("requireOtpVerification") === "on" }
+  });
+  refresh("/checkout", "/admin/settings/checkout");
+  redirect("/admin/settings/checkout?saved=1");
+}
+
+export async function savePaymentInstructionSettings(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    bankAccountName: z.string().min(2),
+    bankName: z.string().min(2),
+    branchName: z.string().min(2),
+    accountNumber: z.string().min(2),
+    routingNumber: z.string().min(2),
+    paymentInstructionText: z.string().min(20),
+    paymentEmail: z.string().email(),
+    whatsappNumber: z.string().optional(),
+    manualBankTransferEnabled: z.boolean(),
+    showBankInstructionInEmail: z.boolean()
+  }).parse({
+    bankAccountName: text(formData.get("bankAccountName")),
+    bankName: text(formData.get("bankName")),
+    branchName: text(formData.get("branchName")),
+    accountNumber: text(formData.get("accountNumber")),
+    routingNumber: text(formData.get("routingNumber")),
+    paymentInstructionText: text(formData.get("paymentInstructionText")),
+    paymentEmail: text(formData.get("paymentEmail")),
+    whatsappNumber: text(formData.get("whatsappNumber")),
+    manualBankTransferEnabled: formData.get("manualBankTransferEnabled") === "on",
+    showBankInstructionInEmail: formData.get("showBankInstructionInEmail") === "on"
+  });
+  await prisma.paymentInstructionSetting.upsert({
+    where: { singletonKey: "default" },
+    update: { ...data, whatsappNumber: data.whatsappNumber || null },
+    create: { singletonKey: "default", ...data, whatsappNumber: data.whatsappNumber || null }
+  });
+  refresh("/admin/settings/payment-instructions");
+  redirect("/admin/settings/payment-instructions?saved=1");
+}
+
+export async function testSmtpSettings() {
+  await requireAdmin();
+  const result = await testSmtpConnection().catch((error) => ({ ok: false, message: error instanceof Error ? error.message : "SMTP test failed." }));
+  redirect(`/admin/settings/payment-instructions?test=${encodeURIComponent(result.message)}&ok=${result.ok ? "1" : "0"}`);
+}
+
+export async function saveShopLegalContent(formData: FormData) {
+  await requireAdmin();
+  const data = z.object({
+    policyKey: z.enum(["terms", "refund"]),
+    title: z.string().min(2),
+    slug: z.string().min(2),
+    content: z.string().min(100),
+    version: z.string().min(1),
+    effectiveDate: z.string().optional(),
+    status: z.nativeEnum(PublishStatus)
+  }).parse({
+    policyKey: text(formData.get("policyKey")),
+    title: text(formData.get("title")),
+    slug: text(formData.get("slug")),
+    content: text(formData.get("content")),
+    version: text(formData.get("version")) || "v1.0",
+    effectiveDate: text(formData.get("effectiveDate")),
+    status: status(formData.get("status"))
+  });
+  await prisma.shopLegalContent.upsert({
+    where: { policyKey: data.policyKey },
+    update: {
+      title: data.title,
+      slug: data.slug,
+      content: data.content,
+      version: data.version,
+      effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+      status: data.status
+    },
+    create: {
+      policyKey: data.policyKey,
+      title: data.title,
+      slug: data.slug,
+      content: data.content,
+      version: data.version,
+      effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+      status: data.status
+    }
+  });
+  refresh("/shop/terms", "/shop/refund-policy", "/admin/shop/legal", "/checkout");
+  redirect(`/admin/shop/legal?saved=${data.policyKey}`);
 }
 
 export async function saveMessagingIntegration(formData: FormData) {

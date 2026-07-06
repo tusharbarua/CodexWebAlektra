@@ -18,6 +18,9 @@ dev.db
 dev.db-*
 *.db-journal
 
+# Generated request documents
+storage/thermal/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

@@ -93,6 +93,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             {related.map((item) => <ProductCard key={item.id} product={{ id: item.id, name: item.name, slug: item.slug, sku: item.sku, model: item.model, brand: item.brand, featured: item.isFeatured, compareAtPrice: item.compareAtPriceBdt ? Number(item.compareAtPriceBdt) : null, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage, description: item.shortDescription }} />)}
           </div>
         </section> : null}
+        <div className="shop-legal-links">
+          <Link href="/shop/terms">Shop Terms & Conditions</Link>
+          <span>·</span>
+          <Link href="/shop/refund-policy">Refund Policy</Link>
+        </div>
       </div>
     </main>
   );

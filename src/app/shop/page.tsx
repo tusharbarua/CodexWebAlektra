@@ -163,6 +163,11 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
             )}
           </section>
         </div>
+        <div className="shop-legal-links">
+          <Link href="/shop/terms">Shop Terms & Conditions</Link>
+          <span>·</span>
+          <Link href="/shop/refund-policy">Refund Policy</Link>
+        </div>
       </div>
     </main>
   );

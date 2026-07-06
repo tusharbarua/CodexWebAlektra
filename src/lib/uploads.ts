@@ -84,6 +84,6 @@ export async function deletePublicUpload(url?: string | null) {
 export const uploadRules = {
   productImage: { allowedTypes: allowedImageTypes, maxBytes: 2 * 1024 * 1024 },
   adminImage: { allowedTypes: allowedImageTypes, maxBytes: 3 * 1024 * 1024 },
-  heroVideo: { allowedTypes: allowedVideoTypes, maxBytes: Number(process.env.HERO_VIDEO_MAX_BYTES ?? 50 * 1024 * 1024) },
+  heroVideo: { allowedTypes: allowedVideoTypes, maxBytes: Number(process.env.HERO_VIDEO_MAX_BYTES ?? 120 * 1024 * 1024) },
   datasheet: { allowedTypes: allowedDocumentTypes, maxBytes: 10 * 1024 * 1024 }
 };

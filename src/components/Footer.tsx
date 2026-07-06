@@ -11,6 +11,8 @@ export function Footer({ settings }: { settings: FooterSettings }) {
   const pathname = usePathname();
   const division = getDivisionFromPath(pathname);
   const thermal = division === "thermal";
+  const sparkle = division === "sparkle";
+  const mapping = division === "mapping";
   const logo = brandLogos[division];
   const brandName = brandNames[division];
   const socialLinks = [
@@ -19,7 +21,7 @@ export function Footer({ settings }: { settings: FooterSettings }) {
     ["YouTube", settings.youtubeUrl]
   ].filter(([, href]) => href);
   return (
-    <footer className={`site-footer ${thermal ? "thermal-footer" : ""}`}>
+    <footer className={`site-footer ${thermal ? "thermal-footer" : ""} ${sparkle ? "sparkle-footer" : ""} ${mapping ? "mapping-footer" : ""}`}>
       <div className="container footer-grid">
         <div>
           <span className={`footer-logo footer-logo-${division}`}>
@@ -35,9 +37,9 @@ export function Footer({ settings }: { settings: FooterSettings }) {
             <br />
             <Link href="/thermal">Alektra Thermal</Link>
             <br />
-            <Link href="/#subdivisions">Alektra Sparkle</Link>
+            <Link href="/sparkle">Alektra Sparkle</Link>
             <br />
-            <Link href="/#subdivisions">Alektra Mapping</Link>
+            <Link href="/mapping">Alektra Mapping</Link>
           </p>
         </div>
         <div>

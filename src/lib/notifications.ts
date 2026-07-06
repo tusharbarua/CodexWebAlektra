@@ -30,6 +30,16 @@ export async function sendOrderNotifications(order: Order & { items?: OrderItem[
     try {
       const result = await sendOrderConfirmation(order);
       emailStatus = result.skipped ? "NOT_CONFIGURED" : "SENT";
+      await prisma.notificationLog.create({
+        data: {
+          orderId: order.id,
+          channel: "EMAIL",
+          recipient: order.customerEmail,
+          status: emailStatus,
+          message: `Order confirmation email for ${order.orderNumber}`,
+          response: result.skipped ? result.status : "Email sent."
+        }
+      });
     } catch (error) {
       emailStatus = "FAILED";
       await prisma.notificationLog.create({
@@ -45,7 +55,16 @@ export async function sendOrderNotifications(order: Order & { items?: OrderItem[
     }
   }
 
-  await prisma.order.update({ where: { id: order.id }, data: { smsStatus, emailStatus } });
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      smsStatus,
+      emailStatus,
+      emailSentAt: emailStatus === "SENT" ? new Date() : undefined,
+      emailLastError: emailStatus === "FAILED" ? "Email failed. Review notification log for details." : null,
+      paymentInstructionSent: emailStatus === "SENT" ? true : order.paymentInstructionSent
+    }
+  });
   return { smsStatus, emailStatus, smsBody };
 }
 

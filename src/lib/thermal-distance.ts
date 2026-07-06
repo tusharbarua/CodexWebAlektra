@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+// Reserved for future use. Currently disabled from Thermal public request flow
+// until a new distance calculation method is selected.
 export const DEFAULT_THERMAL_BASE = {
   name: "Alektra Renewable Base",
   latitude: 22.3585575,
@@ -51,4 +53,3 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return Math.round(radiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 100) / 100;
 }
-

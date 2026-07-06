@@ -22,8 +22,8 @@ export function Header() {
         <nav className="nav-links" aria-label="Primary navigation">
           <Link href="/#epc">EPC</Link>
           <Link href="/thermal">Thermal</Link>
-          <Link href="/#subdivisions">Sparkle</Link>
-          <Link href="/#subdivisions">Mapping</Link>
+          <Link href="/sparkle">Sparkle</Link>
+          <Link href="/mapping">Mapping</Link>
           <Link href="/resources">Resources</Link>
           <Link href="/shop">Shop</Link>
         </nav>

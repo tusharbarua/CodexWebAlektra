@@ -1,6 +1,7 @@
-﻿import { PageKey, Prisma, PrismaClient, PublishStatus, Role } from "@prisma/client";
+import { PageKey, Prisma, PrismaClient, PublishStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { comprehensivePoints, standardPoints, thermalAnomalies } from "../src/data/thermal";
+import { defaultRefundContent, defaultTermsContent } from "../src/lib/shop-legal";
 
 const prisma = new PrismaClient();
 
@@ -562,6 +563,51 @@ async function main() {
     }
   });
 
+  await prisma.ecommerceCheckoutSetting.upsert({
+    where: { singletonKey: "default" },
+    update: { requireOtpVerification: false },
+    create: { singletonKey: "default", requireOtpVerification: false }
+  });
+
+  await prisma.paymentInstructionSetting.upsert({
+    where: { singletonKey: "default" },
+    update: {
+      manualBankTransferEnabled: true,
+      showBankInstructionInEmail: true,
+      bankAccountName: "ALEKTRA RENEWABLE",
+      bankName: "Dutch Bangla Bank Ltd",
+      branchName: "OR Nizam Road",
+      accountNumber: "1291100024117",
+      routingNumber: "090151480",
+      paymentEmail: "contact@alektraepc.com",
+      paymentInstructionText: "After completing payment, please reply to this email with your deposit slip/payment receipt, or send it to our WhatsApp. Please write your order number clearly so that we can trace your payment quickly."
+    },
+    create: {
+      singletonKey: "default",
+      manualBankTransferEnabled: true,
+      showBankInstructionInEmail: true,
+      bankAccountName: "ALEKTRA RENEWABLE",
+      bankName: "Dutch Bangla Bank Ltd",
+      branchName: "OR Nizam Road",
+      accountNumber: "1291100024117",
+      routingNumber: "090151480",
+      paymentEmail: "contact@alektraepc.com",
+      paymentInstructionText: "After completing payment, please reply to this email with your deposit slip/payment receipt, or send it to our WhatsApp. Please write your order number clearly so that we can trace your payment quickly."
+    }
+  });
+
+  await prisma.shopLegalContent.upsert({
+    where: { policyKey: "terms" },
+    update: { title: "Alektra Renewable Shop Terms & Conditions", slug: "shop-terms", content: defaultTermsContent, version: "v1.0", status: PublishStatus.PUBLISHED },
+    create: { policyKey: "terms", title: "Alektra Renewable Shop Terms & Conditions", slug: "shop-terms", content: defaultTermsContent, version: "v1.0", effectiveDate: new Date(), status: PublishStatus.PUBLISHED }
+  });
+
+  await prisma.shopLegalContent.upsert({
+    where: { policyKey: "refund" },
+    update: { title: "Alektra Renewable Shop Refund, Return & Replacement Policy", slug: "shop-refund-policy", content: defaultRefundContent, version: "v1.0", status: PublishStatus.PUBLISHED },
+    create: { policyKey: "refund", title: "Alektra Renewable Shop Refund, Return & Replacement Policy", slug: "shop-refund-policy", content: defaultRefundContent, version: "v1.0", effectiveDate: new Date(), status: PublishStatus.PUBLISHED }
+  });
+
   await prisma.messagingIntegration.upsert({
     where: { singletonKey: "default" },
     update: {},
@@ -610,8 +656,8 @@ async function main() {
 
 async function seedSubdivisionPages() {
   await seedThermalPage();
-  await seedSimpleSubdivision(PageKey.sparkle, "Alektra Sparkle", "sparkle", "Solar panel cleaning service", "Panel cleaning and surface care for operating solar assets.", "Alektra Sparkle helps solar owners maintain cleaner modules, reduce soiling losses and support consistent generation through professional cleaning workflows.");
-  await seedSimpleSubdivision(PageKey.mapping, "Alektra Mapping", "mapping", "Photogrammetry and digital mapping", "Aerial survey, mapping and asset documentation for renewable-energy sites.", "Alektra Mapping supports site planning, digital mapping, aerial survey and documentation for solar and infrastructure projects.");
+  await seedSparklePage();
+  await seedMappingPage();
   await seedSimpleSubdivision(PageKey.epc, "Alektra EPC", "epc", "Solar EPC in Bangladesh", "Rooftop, industrial and commercial solar EPC.", "Alektra EPC designs, engineers, procures, installs and commissions solar plants with net metering and monitoring support.");
 }
 
@@ -801,6 +847,400 @@ async function seedThermalPage() {
     ["Do you provide a PDF report?", "Yes. Requests receive a PDF confirmation, and completed inspections are documented with classified findings and supporting imagery."],
     ["Can you inspect rooftop and ground-mounted PV plants?", "Yes. Flight planning is adapted to rooftop, industrial and ground-mounted plant conditions."],
     ["Is payment required during request submission?", "Not by default. Payment may be requested later if enabled by admin."]
+  ].map(([title, body], index) => ({ title, body, sortOrder: index })));
+}
+
+async function seedSparklePage() {
+  const page = await upsertPage(
+    PageKey.sparkle,
+    "Alektra Sparkle",
+    "sparkle",
+    "Alektra Sparkle | Professional Solar Panel Cleaning for Industrial & Commercial Rooftop Systems",
+    "Premium solar panel cleaning service for industrial and commercial rooftop PV systems in Bangladesh."
+  );
+
+  const hero = await upsertSection(page.id, {
+    sectionKey: "hero",
+    sectionType: "hero",
+    title: "Alektra Sparkle",
+    subtitle: "Professional Solar Panel Cleaning for Industrial & Commercial Rooftop Systems",
+    body: "Alektra Sparkle delivers specialized solar cleaning solutions designed to restore panel performance, reduce soiling losses, and support long-term asset health for industrial and commercial rooftop solar systems. We combine safe cleaning practices, proper equipment, and performance-focused service planning to help clients protect energy yield and maintain system efficiency.",
+    sortOrder: 10,
+    settingsJson: {
+      kicker: "Industrial Solar Cleaning Excellence",
+      primaryCtaText: "Request Service",
+      primaryCtaLink: "#request",
+      secondaryCtaText: "Why Cleaning Matters",
+      secondaryCtaLink: "#why-cleaning",
+      minimumNote: "Minimum Sparkle service request size:",
+      minimumValue: "200 kWp",
+      posterImage: ""
+    }
+  });
+  await replaceItems(hero.id, [{ title: "Sparkle hero media", videoPath: "/uploads/hero/sparkle/sparkle-hero-video.mp4", sortOrder: 0 }]);
+  await prisma.pageSectionItem.updateMany({
+    where: { sectionId: hero.id, title: "Sparkle hero media" },
+    data: { videoPath: "/uploads/hero/sparkle/sparkle-hero-video.mp4" }
+  });
+
+  const existingHeroMedia = await prisma.heroMedia.findFirst({
+    where: { pageKey: PageKey.sparkle, filePath: "/uploads/hero/sparkle/sparkle-hero-video.mp4" }
+  });
+  if (!existingHeroMedia) {
+    await prisma.heroMedia.create({
+      data: {
+        pageKey: PageKey.sparkle,
+        title: "Sparkle rooftop cleaning hero video",
+        mediaType: "video",
+        url: "/uploads/hero/sparkle/sparkle-hero-video.mp4",
+        filePath: "/uploads/hero/sparkle/sparkle-hero-video.mp4",
+        alt: "Alektra Sparkle solar panel cleaning service",
+        altText: "Alektra Sparkle solar panel cleaning service",
+        sortOrder: 0,
+        isPrimary: true,
+        isPublished: true,
+        status: PublishStatus.PUBLISHED
+      }
+    });
+  }
+
+  const why = await upsertSection(page.id, {
+    sectionKey: "why-cleaning",
+    sectionType: "cards",
+    title: "Why Cleaning Solar Panels Is Absolutely Necessary",
+    subtitle: "Yield protection",
+    body: "Industrial and commercial rooftops in Bangladesh can accumulate dust, bird droppings, pollution residue and grime quickly. Routine cleaning helps restore generation, supports maintenance planning and keeps asset performance easier to monitor.",
+    sortOrder: 20
+  });
+  await replaceItems(why.id, [
+    ["Soiling reduces output", "Dust and residue block irradiance and reduce generation across the array.", "Gauge"],
+    ["Uneven dirt creates risk", "Bird droppings and heavy deposits can create mismatch, local heating and monitoring anomalies.", "TriangleAlert"],
+    ["Cleaner assets are easier to manage", "Routine cleaning improves visual condition, generation consistency and O&M planning.", "ShieldCheck"],
+    ["Rooftop plants need attention", "Industrial and commercial roofs can experience rapid contaminant buildup from nearby activity.", "Factory"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const data = await upsertSection(page.id, {
+    sectionKey: "visual-data",
+    sectionType: "comparison",
+    title: "Clean panels convert more of the available sunlight.",
+    subtitle: "Performance view",
+    body: "This visual comparison explains the practical effect: soiled modules lose useful output, while clean modules support stronger energy yield and clearer performance tracking.",
+    sortOrder: 30
+  });
+  await replaceItems(data.id, [
+    { title: "Clean output baseline", body: "A clean array gives monitoring teams a more reliable performance reference.", badge: "100%", sortOrder: 0, settingsJson: { bar: 100 } },
+    { title: "Light soiling", body: "Fine dust and rooftop residue can begin reducing production before the loss is obvious.", badge: "92%", sortOrder: 1, settingsJson: { bar: 92 } },
+    { title: "Heavy soiling", body: "Sticky grime, bird droppings and deposits can create larger localized and system-level losses.", badge: "78%", sortOrder: 2, settingsJson: { bar: 78 } }
+  ]);
+
+  const myth = await upsertSection(page.id, {
+    sectionKey: "rain-myth",
+    sectionType: "myth",
+    title: "Myth: Do Rains Clean Solar Panels?",
+    subtitle: "Rain is not performance-grade cleaning",
+    body: "Rain may remove some loose surface dust, but it usually does not properly clean solar panels. Sticky dust, grime, bird droppings, industrial residue and edge deposits often remain, so rainwater alone cannot guarantee uniform or performance-grade cleaning.",
+    sortOrder: 40,
+    settingsJson: {
+      mythTitle: "Rain washes everything away.",
+      realityTitle: "Professional cleaning is still necessary."
+    }
+  });
+  await replaceItems(myth.id, [
+    { title: "What rain can do", body: "It can move some loose dust from exposed glass surfaces.", sortOrder: 0 },
+    { title: "What rain leaves behind", body: "Sticky grime, residue, droppings and edge deposits often remain after rainfall.", sortOrder: 1 },
+    { title: "What Sparkle provides", body: "A planned, module-safe process designed for uniform cleaning across operating rooftop arrays.", sortOrder: 2 }
+  ]);
+
+  const services = await upsertSection(page.id, {
+    sectionKey: "services",
+    sectionType: "service-cards",
+    title: "Services We Offer",
+    subtitle: "Cleaning capability",
+    body: "Alektra Sparkle focuses on practical cleaning services for large rooftop PV assets where uptime, safety and repeatable process matter.",
+    sortOrder: 50
+  });
+  await replaceItems(services.id, [
+    ["Industrial & commercial rooftop cleaning", "Panel cleaning for large operating rooftop arrays.", "Building2"],
+    ["Routine performance cleaning", "Scheduled cleaning cycles that support consistent generation.", "CalendarCheck"],
+    ["One-time deep cleaning", "Focused cleaning for visibly soiled arrays or post-construction residue.", "Droplets"],
+    ["Equipment-assisted cleaning", "Manual and equipment-assisted cleaning using module-safe handling practices.", "Wrench"],
+    ["Before/after documentation", "Optional visual records to support O&M documentation.", "ClipboardCheck"],
+    ["O&M coordination", "Cleaning plans aligned with operating plants and site access windows.", "Users"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const workflow = await upsertSection(page.id, {
+    sectionKey: "workflow",
+    sectionType: "workflow",
+    title: "A clean, controlled service workflow",
+    subtitle: "Sparkle cleaning workflow",
+    body: "From request review to final completion, the process is structured for industrial and commercial rooftop systems.",
+    sortOrder: 60
+  });
+  await replaceItems(workflow.id, [
+    ["Service request received", "Share module, capacity, location and service requirement details.", "ClipboardCheck"],
+    ["Requirement review", "Our team reviews size, rooftop condition, access and service type.", "FileSearch"],
+    ["Cleaning plan and scheduling", "We coordinate timing, safety preparation and cleaning scope.", "CalendarCheck"],
+    ["Mobilization and safety preparation", "Equipment and team readiness are aligned with site conditions.", "ShieldCheck"],
+    ["Cleaning execution", "Solar panels are cleaned using a safe, non-abrasive approach.", "Droplets"],
+    ["Final review", "Service completion is reviewed with before/after observations where applicable.", "Check"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index, badge: String(index + 1) })));
+
+  await upsertSection(page.id, {
+    sectionKey: "request-form",
+    sectionType: "form-intro",
+    title: "Request Sparkle Service",
+    subtitle: "Service request",
+    body: "Tell us about your rooftop solar plant. PV capacity is calculated automatically from the module rows you provide.",
+    sortOrder: 70,
+    settingsJson: {
+      minimumNote: "Minimum Sparkle service request size: 200 kWp",
+      nextStepsNote: "Our team will review your request and contact you shortly."
+    }
+  });
+
+  const faq = await upsertSection(page.id, {
+    sectionKey: "faq",
+    sectionType: "faq",
+    title: "Sparkle service questions",
+    subtitle: "FAQ",
+    body: "Useful details before requesting solar panel cleaning service.",
+    sortOrder: 80
+  });
+  await replaceItems(faq.id, [
+    ["Why is solar panel cleaning important?", "Cleaning helps reduce soiling losses, improves visual condition and supports more reliable performance monitoring."],
+    ["Does rain clean solar panels effectively?", "Rain may remove loose dust, but sticky dust, grime, bird droppings, industrial residue and edge deposits often remain."],
+    ["What type of systems do you serve?", "Alektra Sparkle is focused on industrial and commercial rooftop solar PV systems."],
+    ["What is the minimum system size for Sparkle service?", "Minimum Sparkle service request size is 200 kWp."],
+    ["Do you provide one-time and scheduled cleaning?", "Yes. Requests can be made for routine cleaning, one-time deep cleaning and scheduled maintenance cleaning."],
+    ["Is the cleaning process safe for panels?", "The service philosophy is soft-contact, non-abrasive and module-safe handling by trained personnel."],
+    ["Do you serve industrial and commercial rooftop systems only?", "That is the primary service focus for Sparkle at this stage."],
+    ["Can you coordinate with maintenance teams?", "Yes. Cleaning plans can be coordinated with site access, safety and O&M schedules."]
+  ].map(([title, body], index) => ({ title, body, sortOrder: index })));
+}
+
+async function seedMappingPage() {
+  const page = await upsertPage(
+    PageKey.mapping,
+    "Alektra Mapping",
+    "mapping",
+    "Alektra Mapping | Drone Mapping, Photogrammetry, LiDAR and 3D Digital Twin Documentation",
+    "Advanced aerial mapping, 3D visualization, photogrammetry, LiDAR, digital twin and geospatial documentation services."
+  );
+
+  const hero = await upsertSection(page.id, {
+    sectionKey: "hero",
+    sectionType: "hero",
+    title: "Alektra Mapping",
+    subtitle: "Advanced Photogrammetry & LiDAR Mapping for Assets, Heritage, Infrastructure, and Power Corridors",
+    body: "Alektra Mapping transforms real-world sites, structures, corridors, and assets into accurate digital intelligence. Using drone-based data acquisition, AI-assisted processing, advanced stitching software, and our proprietary mapping workflow, we deliver high-resolution orthomosaics, 3D models, digital twins, asset maps, inspection datasets, and geospatial documentation for smarter engineering, maintenance, preservation, and decision-making.",
+    sortOrder: 10,
+    settingsJson: {
+      kicker: "AI-Powered Drone Mapping & 3D Geospatial Intelligence",
+      primaryCtaText: "Request Mapping Service",
+      primaryCtaLink: "#request",
+      secondaryCtaText: "Explore Mapping Methods",
+      secondaryCtaLink: "#methods",
+      signature: "Whatever it is — we map it with precision.",
+      posterImage: ""
+    }
+  });
+  await replaceItems(hero.id, [{ title: "Mapping hero media", videoPath: "/uploads/hero/mapping/mapping-hero-video.mp4", sortOrder: 0 }]);
+
+  const existingHeroMedia = await prisma.heroMedia.findFirst({
+    where: { pageKey: PageKey.mapping, filePath: "/uploads/hero/mapping/mapping-hero-video.mp4" }
+  });
+  if (!existingHeroMedia) {
+    await prisma.heroMedia.create({
+      data: {
+        pageKey: PageKey.mapping,
+        title: "Mapping drone geospatial hero video",
+        mediaType: "video",
+        url: "/uploads/hero/mapping/mapping-hero-video.mp4",
+        filePath: "/uploads/hero/mapping/mapping-hero-video.mp4",
+        alt: "Alektra Mapping drone mapping and 3D visualization",
+        altText: "Alektra Mapping drone mapping and 3D visualization",
+        sortOrder: 0,
+        isPrimary: true,
+        isPublished: true,
+        status: PublishStatus.PUBLISHED
+      }
+    });
+  }
+
+  const positioning = await upsertSection(page.id, {
+    sectionKey: "positioning",
+    sectionType: "cards",
+    title: "Spatial intelligence for assets, infrastructure, corridors, and sites.",
+    subtitle: "Professional positioning",
+    body: "Alektra Mapping is built for organizations that need accurate, visual, and actionable spatial intelligence. From industrial rooftops, substations, power lines, and solar plants to heritage structures, construction sites, terrain, and infrastructure corridors, we capture, process, and transform complex physical environments into reliable digital datasets.",
+    sortOrder: 20
+  });
+  await replaceItems(positioning.id, [
+    ["Asset mapping", "Industrial, solar, utility and infrastructure assets documented with geospatial context.", "MapPinned"],
+    ["Digital twin creation", "A reliable visual baseline for future comparison, maintenance and lifecycle tracking.", "Boxes"],
+    ["Inspection-ready datasets", "Geotagged imagery, maps and visual records that support engineering decisions.", "FileSearch"],
+    ["Corridor intelligence", "Power line and utility corridor mapping for visualization, clearance and documentation.", "Route"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const ai = await upsertSection(page.id, {
+    sectionKey: "ai-workflow",
+    sectionType: "feature-panel",
+    title: "AI-Assisted Processing & Proprietary Mapping Workflow",
+    subtitle: "Geospatial processing",
+    body: "We use industry-leading AI-assisted mapping, stitching, reconstruction, and geospatial processing tools to convert raw drone imagery, LiDAR scans, and field data into accurate, usable deliverables. Our internal proprietary workflow helps improve data organization, asset tagging, reporting consistency, and project-specific visualization for engineering and inspection teams.",
+    sortOrder: 30
+  });
+  await replaceItems(ai.id, [
+    ["AI-assisted stitching", "Advanced stitching and reconstruction workflows for high-resolution mapping outputs.", "Sparkles"],
+    ["Asset tagging", "Organized asset references, visual evidence and project-specific tags.", "Binary"],
+    ["Data validation", "Structured quality checks before reporting and delivery packaging.", "Check"],
+    ["Reporting workflow", "Consistent outputs for engineering, inspection and management teams.", "Database"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const methods = await upsertSection(page.id, {
+    sectionKey: "methods",
+    sectionType: "comparison-cards",
+    title: "Choose the Right Mapping Method",
+    subtitle: "Photogrammetry vs LiDAR",
+    body: "Alektra Mapping offers both photogrammetry-based and LiDAR-based mapping depending on project objective, accuracy requirement, surface condition, budget, and deliverable type.",
+    sortOrder: 40
+  });
+  await replaceItems(methods.id, [
+    {
+      title: "Photogrammetry-Based Mapping",
+      badge: "Photogrammetry",
+      body: "Photogrammetry uses overlapping high-resolution images captured from drones or cameras and processes them through specialized software to create orthomosaics, textured 3D models, 3D mesh, and visual site documentation.\n\n- Best for color-rich 3D models, orthomosaic maps, rooftop and site visualization, construction progress, heritage documentation, solar PV and industrial asset visual inspection.\n- Benefits include rich color and texture, cost-effective documentation, strong presentation value, and easier visual interpretation.\n- Limitations include dependency on lighting, image quality, shadows, reflective surfaces, weather, and featureless surfaces.",
+      sortOrder: 0
+    },
+    {
+      title: "LiDAR-Based Mapping",
+      badge: "LiDAR",
+      body: "LiDAR uses laser pulses to measure distances and generate dense 3D point clouds and elevation datasets. It is useful where geometry, elevation, vegetation penetration, and high-precision spatial measurement are more important than visual texture alone.\n\n- Best for power line and corridor mapping, terrain/elevation mapping, vegetation and clearance analysis, complex infrastructure, and utility corridors.\n- Benefits include strong geometric accuracy, better low-light operation, dense point clouds, and engineering-grade spatial analysis where required.\n- Limitations include higher cost, specialized equipment, and additional processing for color or texture.",
+      sortOrder: 1
+    }
+  ]);
+
+  const matrix = await upsertSection(page.id, {
+    sectionKey: "comparison-matrix",
+    sectionType: "matrix",
+    title: "Mapping method comparison",
+    subtitle: "Visual matrix",
+    body: "A clear technical comparison helps select the right data capture method for the objective.",
+    sortOrder: 50
+  });
+  await replaceItems(matrix.id, [
+    ["Data capture method", "Overlapping high-resolution imagery", "Laser pulse distance measurement"],
+    ["Output type", "Orthomosaic, textured 3D mesh, visual model", "Dense point cloud, elevation model, geometry dataset"],
+    ["Visual texture", "Excellent color and surface texture", "Requires additional processing or colorization"],
+    ["Elevation/geometry strength", "Good for many visual mapping projects", "Strong for geometry and elevation analysis"],
+    ["Vegetation penetration", "Limited", "Better than image-only capture"],
+    ["Lighting dependency", "Higher dependency on lighting and shadows", "Lower dependency on visible light"],
+    ["Cost level", "Generally more cost-effective", "Higher equipment and processing cost"],
+    ["Best use case", "Visual documentation and presentation", "Corridors, terrain, clearance and engineering analysis"]
+  ].map(([title, photogrammetry, lidar], index) => ({ title, sortOrder: index, settingsJson: { photogrammetry, lidar } })));
+
+  const services = await upsertSection(page.id, {
+    sectionKey: "services",
+    sectionType: "service-cards",
+    title: "Mapping Services We Offer",
+    subtitle: "Capabilities",
+    body: "Professional drone mapping and geospatial documentation services for renewable-energy, industrial, utility, heritage and construction environments.",
+    sortOrder: 60
+  });
+  await replaceItems(services.id, [
+    ["Drone Photogrammetry Mapping", "High-resolution drone imagery processed into maps, 3D models and visual site documentation.", "Camera"],
+    ["LiDAR Mapping & Point Cloud Capture", "Dense point cloud and elevation datasets for geometry-focused mapping needs.", "ScanLine"],
+    ["Orthomosaic Map Generation", "Georeferenced visual map outputs for planning, documentation and inspection.", "Map"],
+    ["3D Mesh & Digital Twin Modeling", "Digital twin references and textured 3D models for asset visualization.", "Boxes"],
+    ["Industrial Asset Mapping", "Factory, rooftop, substation and industrial site asset documentation.", "Building2"],
+    ["Solar PV Plant Mapping", "Solar plant layouts, rooftop references and O&M-ready visual documentation.", "Zap"],
+    ["Power Line & Corridor Inspection Mapping", "Utility corridor and line mapping for visualization and clearance review.", "RadioTower"],
+    ["Heritage & Architectural Documentation", "Visual preservation records and 3D documentation for structures.", "Landmark"],
+    ["Construction Progress Mapping", "Recurring mapping for progress monitoring and comparison.", "Milestone"],
+    ["Rooftop & Terrain Mapping", "Roof, land, surface and terrain mapping for planning and design support.", "Layers3"],
+    ["Geotagged Visual Inspection Documentation", "Inspection datasets with spatial context and traceable imagery.", "FileSearch"],
+    ["AI-Assisted Asset Tagging and Reporting", "Structured project records, tagged assets and reporting consistency.", "CircuitBoard"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const deliverables = await upsertSection(page.id, {
+    sectionKey: "deliverables",
+    sectionType: "deliverables",
+    title: "What You Can Receive",
+    subtitle: "Deliverables",
+    body: "Final deliverables depend on selected mapping method, site condition, required accuracy, survey control, and project scope.",
+    sortOrder: 70
+  });
+  await replaceItems(deliverables.id, ["Orthomosaic map", "3D textured model", "3D mesh", "Point cloud", "Digital twin reference", "Contour/elevation model if applicable", "Geotagged image dataset", "Asset map", "Inspection-ready report", "Corridor visualization", "Before/after or progress comparison dataset", "Web-viewable model link if implemented later", "PDF report and downloadable dataset package"].map((title, index) => ({ title, sortOrder: index })));
+
+  const useCases = await upsertSection(page.id, {
+    sectionKey: "use-cases",
+    sectionType: "use-cases",
+    title: "Where Mapping Creates Value",
+    subtitle: "Use cases",
+    body: "Alektra Mapping supports engineering, inspection, preservation, operations and management teams with visual geospatial intelligence.",
+    sortOrder: 80
+  });
+  await replaceItems(useCases.id, [
+    ["Solar PV plant mapping", "Layout, asset and visual documentation for solar plants.", "Zap"],
+    ["Industrial rooftop mapping", "Rooftop geometry and asset visualization for commercial sites.", "Building2"],
+    ["Power line and utility corridor mapping", "Corridor references and visual inspection datasets.", "RadioTower"],
+    ["Substation and electrical asset documentation", "Utility asset records with spatial and visual context.", "CircuitBoard"],
+    ["Heritage structure preservation", "3D documentation for preservation and future reference.", "Landmark"],
+    ["Construction progress monitoring", "Repeatable site records for progress comparison.", "Milestone"],
+    ["Factory/warehouse asset mapping", "Industrial site inventory and spatial documentation.", "Boxes"],
+    ["Terrain and land development mapping", "Terrain, surface and planning references.", "Layers3"],
+    ["Disaster or damage documentation", "Visual condition records after events or incidents.", "FileSearch"],
+    ["Digital twin baseline creation", "Reference datasets for future lifecycle comparisons.", "SquareStack"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const workflow = await upsertSection(page.id, {
+    sectionKey: "workflow",
+    sectionType: "workflow",
+    title: "From site request to mapping deliverables",
+    subtitle: "Mapping workflow",
+    body: "A structured workflow keeps capture, processing, validation and reporting aligned with project objectives.",
+    sortOrder: 90
+  });
+  await replaceItems(workflow.id, [
+    ["Service Request", "Share the site, objective and desired deliverables.", "FileSearch"],
+    ["Project Scope Review", "Review area, method, access, safety and output needs.", "Search"],
+    ["Method Selection", "Select photogrammetry, LiDAR or hybrid capture.", "Crosshair"],
+    ["Flight Planning & Safety Review", "Plan routes, altitude, overlap and site safety requirements.", "Plane"],
+    ["Drone Data Acquisition", "Capture imagery, LiDAR scans or hybrid datasets.", "Camera"],
+    ["AI-Assisted Processing & Stitching", "Process imagery, scans and reconstruction data.", "Sparkles"],
+    ["Quality Check and Data Validation", "Review completeness, consistency and project fit.", "Check"],
+    ["Deliverables & Reporting", "Package maps, models, reports and datasets.", "FileArchive"],
+    ["Optional Future Comparison", "Update digital twin references over time.", "SquareStack"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index, badge: String(index + 1) })));
+
+  await upsertSection(page.id, {
+    sectionKey: "request-form",
+    sectionType: "form-intro",
+    title: "Request Mapping Service",
+    subtitle: "Service request",
+    body: "Tell us what needs to be mapped. Our team will review your objective, site type, preferred method and deliverables before recommending the right mapping approach.",
+    sortOrder: 100
+  });
+
+  const faq = await upsertSection(page.id, {
+    sectionKey: "faq",
+    sectionType: "faq",
+    title: "Mapping service questions",
+    subtitle: "FAQ",
+    body: "Useful details before requesting drone mapping, LiDAR or digital twin documentation.",
+    sortOrder: 110
+  });
+  await replaceItems(faq.id, [
+    ["What is drone mapping?", "Drone mapping captures aerial imagery or LiDAR data and processes it into maps, models, point clouds, datasets and visual documentation."],
+    ["What is the difference between photogrammetry and LiDAR?", "Photogrammetry builds maps and 3D models from overlapping images. LiDAR uses laser measurements to create dense point clouds and stronger geometry/elevation datasets."],
+    ["Which mapping method should I choose?", "It depends on the project objective, accuracy requirement, site condition, budget and deliverables. Alektra can recommend photogrammetry, LiDAR or a hybrid approach."],
+    ["Can you map solar PV plants and rooftops?", "Yes. Solar PV plants, industrial rooftops and commercial rooftops are key mapping applications."],
+    ["Can you map power lines or utility corridors?", "Yes. Corridor and utility mapping can support visualization, documentation and clearance-focused review."],
+    ["Can you create 3D models or digital twins?", "Yes. Deliverables can include textured 3D models, digital twin references, asset maps and inspection-ready visual datasets."],
+    ["Do you provide mapping for heritage or architectural documentation?", "Yes. Photogrammetry is especially useful for heritage, architectural and structure documentation where visual texture matters."],
+    ["What deliverables will I receive?", "Deliverables depend on scope and may include orthomosaic maps, 3D models, point clouds, reports, digital twin references and downloadable datasets."],
+    ["Is LiDAR always necessary?", "No. Photogrammetry is often sufficient for visual mapping. LiDAR is selected when geometry, elevation or vegetation-related requirements justify it."],
+    ["Do you provide custom mapping reports?", "Yes. Reporting can be tailored to project objective, inspection use, asset documentation or management needs."]
   ].map(([title, body], index) => ({ title, body, sortOrder: index })));
 }
 

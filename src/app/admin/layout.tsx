@@ -5,8 +5,8 @@ import { auth, isAdminRole, signOut } from "@/lib/auth";
 const groups = [
   { label: "Overview", links: [["Dashboard", "/admin"]] },
   { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
-  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Delivery Settings", "/admin/settings/delivery"]] },
-  { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["Thermal Inspections", "/admin/thermal-inspections"]] },
+  { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Delivery Settings", "/admin/settings/delivery"], ["Checkout Settings", "/admin/settings/checkout"], ["Payment Instructions", "/admin/settings/payment-instructions"], ["Shop Legal", "/admin/shop/legal"]] },
+  { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Sparkle Requests", "/admin/sparkle-requests"], ["Mapping Requests", "/admin/mapping-requests"]] },
   { label: "Integrations", links: [["API Integrations", "/admin/integrations"], ["Messaging API", "/admin/integrations/messaging"], ["Location Dataset", "/admin/integrations/location-api"]] },
   { label: "People", links: [["Contact Submissions", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] },
   { label: "Settings", links: [["Impact Values", "/admin/impact"], ["Homepage Content", "/admin/content"], ["Coupons", "/admin/coupons"], ["Customers", "/admin/customers"]] }

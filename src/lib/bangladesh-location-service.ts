@@ -2,6 +2,7 @@ import divisionsRaw from "bangladesh-geojson/divisions";
 import districtsRaw from "bangladesh-geojson/districts";
 import upazilasRaw from "bangladesh-geojson/upazilas";
 import postcodesRaw from "bangladesh-geojson/postcodes";
+import { locationOverrides } from "@/lib/location-overrides";
 
 export type NormalizedDivision = {
   id: string;
@@ -67,7 +68,22 @@ export function getDistrictsByDivision(divisionId: string) {
 }
 
 export function getUpazilasByDistrict(districtId: string) {
-  return upazilas.filter((upazila) => upazila.districtId === districtId);
+  const base = upazilas.filter((upazila) => upazila.districtId === districtId);
+  const district = districts.find((item) => item.id === districtId);
+  const division = district ? divisions.find((item) => item.id === district.divisionId) : null;
+  if (!district || !division) return base;
+
+  const additions = locationOverrides.upazilas
+    .filter((item) => sameName(item.divisionName, division.name) && sameName(item.districtName, district.name))
+    .filter((item) => !base.some((upazila) => sameName(upazila.name, item.name)))
+    .map((item) => ({
+      id: item.id,
+      districtId,
+      name: item.name,
+      bnName: item.bnName
+    }));
+
+  return mergeSortedUpazilas(base, additions);
 }
 
 export function getPostcodesByDistrict(districtId: string) {
@@ -105,7 +121,7 @@ export function searchBangladeshLocation(query: string) {
     }
   }
 
-  for (const upazila of upazilas) {
+  for (const upazila of getAllUpazilas()) {
     if (matches(upazila.name) || matches(upazila.bnName)) {
       const district = districts.find((item) => item.id === upazila.districtId);
       const division = district ? divisions.find((item) => item.id === district.divisionId) : undefined;
@@ -147,10 +163,10 @@ export function searchBangladeshLocation(query: string) {
 
 export function getFullLocationHierarchy() {
   return divisions.map((division) => ({
-    ...division,
-    districts: getDistrictsByDivision(division.id).map((district) => ({
-      ...district,
-      upazilas: getUpazilasByDistrict(district.id)
+      ...division,
+      districts: getDistrictsByDivision(division.id).map((district) => ({
+        ...district,
+        upazilas: getUpazilasByDistrict(district.id)
     }))
   }));
 }
@@ -161,10 +177,26 @@ export function getDatasetStats() {
     providerType: "Local package/data",
     divisions: divisions.length,
     districts: districts.length,
-    upazilas: upazilas.length,
+    upazilas: getAllUpazilas().length,
     postcodes: postcodes.length,
     installed: true
   };
+}
+
+function getAllUpazilas() {
+  return districts.flatMap((district) => getUpazilasByDistrict(district.id));
+}
+
+function mergeSortedUpazilas(base: NormalizedUpazila[], additions: NormalizedUpazila[]) {
+  const seen = new Set<string>();
+  return [...base, ...additions]
+    .filter((item) => {
+      const key = item.name.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function normalizeDivision(row: RawDivision): NormalizedDivision {
