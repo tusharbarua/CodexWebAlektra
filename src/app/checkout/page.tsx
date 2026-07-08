@@ -1,18 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { CheckoutForm } from "@/components/CheckoutForm";
 import { defaultRefundContent, defaultTermsContent } from "@/lib/shop-legal";
+import { getCustomerSession } from "@/lib/customer-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function CheckoutPage() {
-  const [settings, checkoutSettings, terms, refund] = await Promise.all([
+  const customer = await getCustomerSession();
+  const [settings, checkoutSettings, terms, refund, savedAddresses] = await Promise.all([
     prisma.ecommerceDeliverySetting.findUnique({ where: { singletonKey: "default" } }).catch(() => null),
     prisma.ecommerceCheckoutSetting.findUnique({ where: { singletonKey: "default" } }).catch(() => null),
     prisma.shopLegalContent.findUnique({ where: { policyKey: "terms" } }).catch(() => null),
-    prisma.shopLegalContent.findUnique({ where: { policyKey: "refund" } }).catch(() => null)
+    prisma.shopLegalContent.findUnique({ where: { policyKey: "refund" } }).catch(() => null),
+    customer ? prisma.customerAddress.findMany({ where: { customerId: customer.id }, orderBy: [{ isDefault: "desc" }, { updatedAt: "desc" }] }) : []
   ]);
   return (
-    <main className="page-shell">
+    <main className="page-shell checkout-page">
       <div className="container">
         <p className="kicker">Checkout</p>
         <h1>Confirm delivery and payment.</h1>
@@ -34,7 +37,25 @@ export default async function CheckoutPage() {
           refundTitle: refund?.title ?? "Alektra Renewable Shop Refund, Return & Replacement Policy",
           refundContent: refund?.content ?? defaultRefundContent,
           refundEffectiveDate: refund?.effectiveDate?.toISOString() ?? null
-        }} />
+        }} customerProfile={customer ? {
+          fullName: customer.fullName,
+          email: customer.email,
+          mobileNumber: customer.mobileNumber
+        } : null} savedAddresses={savedAddresses.map((address) => ({
+          id: address.id,
+          recipientName: address.recipientName,
+          mobileNumber: address.mobileNumber,
+          divisionId: address.divisionId,
+          divisionName: address.divisionName,
+          districtId: address.districtId,
+          districtName: address.districtName,
+          upazilaId: address.upazilaId,
+          upazilaName: address.upazilaName,
+          addressLine: address.addressLine,
+          postalCode: address.postalCode,
+          deliveryNotes: address.deliveryNotes,
+          isDefault: address.isDefault
+        }))} />
       </div>
     </main>
   );

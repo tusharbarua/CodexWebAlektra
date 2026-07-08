@@ -79,7 +79,7 @@ export function CartDrawer() {
               <ShoppingBag size={34} />
               <h3>Your cart is empty</h3>
               <p>Add solar products and review them here without leaving the shop.</p>
-              <Link href="/shop" onClick={() => setOpen(false)}>Browse products</Link>
+              <Link className="empty-cart-browse-button" href="/shop" onClick={() => setOpen(false)}>Browse products</Link>
             </div>
           )}
         </div>

@@ -29,7 +29,7 @@ export function CartView() {
         <ShoppingBag size={38} />
         <h2>Your cart is ready for solar equipment.</h2>
         <p>Browse modules, inverters, batteries, cables and mounting accessories.</p>
-        <Link href="/shop">Browse products</Link>
+        <Link className="empty-cart-browse-button" href="/shop">Browse products</Link>
       </div>
     );
   }

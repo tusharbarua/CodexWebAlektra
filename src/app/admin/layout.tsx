@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ExternalLink, LogOut } from "lucide-react";
 import { auth, isAdminRole, signOut } from "@/lib/auth";
 
 const groups = [
   { label: "Overview", links: [["Dashboard", "/admin"]] },
-  { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Footer Settings", "/admin/site-settings/footer"], ["SEO", "/admin/seo"]] },
+  { label: "Site Content", links: [["Pages", "/admin/pages"], ["Hero Media", "/admin/hero-media"], ["Footer Settings", "/admin/site-settings/footer"], ["Legal Content", "/admin/legal"], ["SEO", "/admin/seo"]] },
   { label: "Ecommerce", links: [["Products", "/admin/products"], ["Categories", "/admin/categories"], ["Orders", "/admin/orders"], ["Delivery Settings", "/admin/settings/delivery"], ["Checkout Settings", "/admin/settings/checkout"], ["Payment Instructions", "/admin/settings/payment-instructions"], ["Shop Legal", "/admin/shop/legal"]] },
-  { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Sparkle Requests", "/admin/sparkle-requests"], ["Mapping Requests", "/admin/mapping-requests"]] },
+  { label: "Operations", links: [["Resources", "/admin/resources"], ["Projects", "/admin/projects"], ["EPC Proposals", "/admin/epc-proposals"], ["Thermal Inspections", "/admin/thermal-inspections"], ["Sparkle Requests", "/admin/sparkle-requests"], ["Mapping Requests", "/admin/mapping-requests"]] },
   { label: "Integrations", links: [["API Integrations", "/admin/integrations"], ["Messaging API", "/admin/integrations/messaging"], ["Location Dataset", "/admin/integrations/location-api"]] },
   { label: "People", links: [["Contact Submissions", "/admin/contacts"], ["Users", "/admin/users"], ["Roles", "/admin/roles"]] },
   { label: "Settings", links: [["Impact Values", "/admin/impact"], ["Homepage Content", "/admin/content"], ["Coupons", "/admin/coupons"], ["Customers", "/admin/customers"]] }
@@ -37,12 +38,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div><strong>Control Center</strong><span>Manage Alektra website, commerce and operations</span></div>
           <div className="admin-user">
             <span>{user.name || user.email}</span>
-            <Link href="/">View Website</Link>
+            <Link className="admin-topbar-action visit-site" href="/">
+              <ExternalLink size={15} aria-hidden="true" />
+              Visit Website
+            </Link>
             <form action={async () => {
               "use server";
               await signOut({ redirectTo: "/admin/login" });
             }}>
-              <button type="submit">Logout</button>
+              <button className="admin-topbar-action logout" type="submit">
+                <LogOut size={15} aria-hidden="true" />
+                Logout
+              </button>
             </form>
           </div>
         </header>

@@ -6,6 +6,113 @@ import { renderPolicyPointsHtml, renderPolicyPointsText } from "@/lib/policy-for
 
 type OrderWithItems = Order & { items?: OrderItem[] };
 
+export async function sendCustomerVerificationEmail(input: {
+  email: string;
+  fullName: string;
+  token: string;
+}) {
+  if (!isSmtpConfigured()) return { skipped: true, status: "NOT_CONFIGURED" as const };
+  const origin = appOrigin();
+  const verifyUrl = `${origin}/account/verify-email?token=${encodeURIComponent(input.token)}`;
+  const subject = "Verify your Alektra Renewable account";
+  const html = `
+    <div style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+      <div style="max-width:680px;margin:0 auto;padding:28px 16px;">
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,0.08);">
+          <header style="padding:26px 28px;background:linear-gradient(135deg,#ecfdf5,#fef3c7);">
+            <p style="margin:0;color:#047857;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;">Alektra Renewable Account</p>
+            <h1 style="margin:8px 0 4px;font-size:28px;line-height:1.15;">Verify your email</h1>
+            <p style="margin:0;color:#475569;">Welcome, ${escapeHtml(input.fullName)}. Confirm your email to activate your customer account.</p>
+          </header>
+          <main style="padding:28px;">
+            <p style="margin:0 0 18px;color:#475569;line-height:1.7;">Click the button below to verify your email address. This verification link expires in 24 hours.</p>
+            <p style="margin:0 0 22px;"><a href="${verifyUrl}" style="display:inline-block;padding:13px 20px;border-radius:999px;background:linear-gradient(135deg,#006f35,#52b748);color:#ffffff;text-decoration:none;font-weight:700;">Verify Email</a></p>
+            <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">If the button does not work, copy and paste this link into your browser:<br><a href="${verifyUrl}" style="color:#047857;">${verifyUrl}</a></p>
+            <p style="margin:18px 0 0;color:#64748b;font-size:13px;">If you did not create this account, you can safely ignore this email.</p>
+          </main>
+        </div>
+      </div>
+    </div>
+  `;
+  const text = `Verify your Alektra Renewable account
+
+Welcome, ${input.fullName}.
+
+Open this link within 24 hours to verify your email:
+${verifyUrl}
+
+If you did not create this account, ignore this email.`;
+  await createTransport().sendMail({
+    from: mailFrom(),
+    to: input.email,
+    subject,
+    text,
+    html
+  });
+  return { skipped: false, status: "SENT" as const };
+}
+
+export async function sendCustomerPasswordResetEmail(input: {
+  email: string;
+  fullName: string;
+  token: string;
+}) {
+  if (!isSmtpConfigured()) return { skipped: true, status: "NOT_CONFIGURED" as const };
+  const origin = appOrigin();
+  const resetUrl = `${origin}/account/reset-password?token=${encodeURIComponent(input.token)}`;
+  const subject = "Reset your Alektra Renewable account password";
+  const html = customerActionEmail({
+    title: "Reset your password",
+    eyebrow: "Alektra Renewable Account",
+    greeting: `Hello, ${escapeHtml(input.fullName)}.`,
+    body: "Use the button below to reset your customer account password. This reset link expires in 1 hour.",
+    buttonText: "Reset Password",
+    url: resetUrl,
+    note: "If you did not request this password reset, you can safely ignore this email."
+  });
+  const text = `Reset your Alektra Renewable account password
+
+Hello, ${input.fullName}.
+
+Open this link within 1 hour to reset your password:
+${resetUrl}
+
+If you did not request this password reset, ignore this email.`;
+  await createTransport().sendMail({ from: mailFrom(), to: input.email, subject, text, html });
+  return { skipped: false, status: "SENT" as const };
+}
+
+export async function sendCustomerAccountSetupEmail(input: {
+  email: string;
+  fullName: string;
+  token: string;
+  orderNumber?: string;
+}) {
+  if (!isSmtpConfigured()) return { skipped: true, status: "NOT_CONFIGURED" as const };
+  const origin = appOrigin();
+  const setupUrl = `${origin}/account/complete-setup?token=${encodeURIComponent(input.token)}`;
+  const subject = "Complete your Alektra Renewable account";
+  const html = customerActionEmail({
+    title: "Complete your account",
+    eyebrow: "Alektra Renewable Shop",
+    greeting: `Thank you${input.orderNumber ? ` for order ${escapeHtml(input.orderNumber)}` : ""}, ${escapeHtml(input.fullName)}.`,
+    body: "Set your password and verify your email to track this order, save delivery details, and manage your Alektra Renewable shop account.",
+    buttonText: "Set Password & Verify Email",
+    url: setupUrl,
+    note: "This setup link expires in 24 hours. If you did not request an account, you can safely ignore this email."
+  });
+  const text = `Complete your Alektra Renewable account
+
+Thank you${input.orderNumber ? ` for order ${input.orderNumber}` : ""}, ${input.fullName}.
+
+Set your password and verify your email using this link within 24 hours:
+${setupUrl}
+
+If you did not request an account, ignore this email.`;
+  await createTransport().sendMail({ from: mailFrom(), to: input.email, subject, text, html });
+  return { skipped: false, status: "SENT" as const };
+}
+
 export async function sendOrderConfirmation(order: OrderWithItems) {
   if (!order.customerEmail) return { skipped: true, status: "NO_EMAIL" as const };
   if (!isSmtpConfigured()) return { skipped: true, status: "NOT_CONFIGURED" as const };
@@ -287,6 +394,36 @@ function mailFrom() {
 
 function appOrigin() {
   return (process.env.NEXTAUTH_URL ?? process.env.APP_URL ?? "https://www.alektraepc.com").replace(/\/$/, "");
+}
+
+function customerActionEmail(input: {
+  eyebrow: string;
+  title: string;
+  greeting: string;
+  body: string;
+  buttonText: string;
+  url: string;
+  note: string;
+}) {
+  return `
+    <div style="margin:0;padding:0;background:#f7fff8;font-family:Arial,Helvetica,sans-serif;color:#102a1f;">
+      <div style="max-width:680px;margin:0 auto;padding:28px 16px;">
+        <div style="background:#ffffff;border:1px solid #dbeadf;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px rgba(16,42,31,0.10);">
+          <header style="padding:26px 28px;background:linear-gradient(135deg,#ecfdf5,#fef3c7);">
+            <p style="margin:0;color:#047857;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px;">${escapeHtml(input.eyebrow)}</p>
+            <h1 style="margin:8px 0 4px;font-size:28px;line-height:1.15;color:#063b22;">${escapeHtml(input.title)}</h1>
+            <p style="margin:0;color:#475569;">${input.greeting}</p>
+          </header>
+          <main style="padding:28px;">
+            <p style="margin:0 0 18px;color:#475569;line-height:1.7;">${escapeHtml(input.body)}</p>
+            <p style="margin:0 0 22px;"><a href="${input.url}" style="display:inline-block;padding:13px 20px;border-radius:999px;background:linear-gradient(135deg,#006f35,#52b748);color:#ffffff;text-decoration:none;font-weight:700;">${escapeHtml(input.buttonText)}</a></p>
+            <p style="margin:0;color:#64748b;font-size:13px;line-height:1.6;">If the button does not work, copy and paste this link into your browser:<br><a href="${input.url}" style="color:#047857;">${input.url}</a></p>
+            <p style="margin:18px 0 0;color:#64748b;font-size:13px;">${escapeHtml(input.note)}</p>
+          </main>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 async function getPaymentInstructionSettings() {

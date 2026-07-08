@@ -19,8 +19,9 @@ export default async function AdminFooterSettingsPage({
       {params.saved ? <div className="admin-success">Footer settings saved.</div> : null}
       <form action={saveFooterSettings} className="panel admin-form">
         <Field label="Contact email" name="contactEmail" value={current.contactEmail} type="email" required />
-        <Field label="Contact phone" name="contactPhone" value={current.contactPhone} required />
-        <Field label="Address" name="address" value={current.address} required />
+        <Field label="Primary phone number" name="contactPhone" value={current.contactPhone} required />
+        <Field label="Secondary phone number" name="secondaryPhone" value={current.secondaryPhone ?? ""} />
+        <Field label="Location text" name="address" value={current.address} required />
         <Field label="Facebook link" name="facebookUrl" value={current.facebookUrl ?? ""} />
         <Field label="LinkedIn link" name="linkedinUrl" value={current.linkedinUrl ?? ""} />
         <Field label="YouTube link" name="youtubeUrl" value={current.youtubeUrl ?? ""} />

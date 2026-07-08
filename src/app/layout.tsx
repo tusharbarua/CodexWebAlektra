@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { PublicChrome } from "@/components/PublicChrome";
+import { getFooterLegalDocuments, getSiteMapGroups } from "@/lib/legal-documents";
 import { getFooterSettings } from "@/lib/site-settings";
 import "./globals.css";
 
@@ -26,11 +27,13 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = (await headers()).get("x-pathname") ?? "";
   const isAdminRoute = pathname.startsWith("/admin");
-  const footerSettings = isAdminRoute ? null : await getFooterSettings();
+  const [footerSettings, legalDocuments] = isAdminRoute
+    ? [null, []]
+    : await Promise.all([getFooterSettings(), getFooterLegalDocuments()]);
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <PublicChrome footerSettings={footerSettings}>{children}</PublicChrome>
+        <PublicChrome footerSettings={footerSettings} legalDocuments={legalDocuments} siteMapGroups={getSiteMapGroups()}>{children}</PublicChrome>
       </body>
     </html>
   );

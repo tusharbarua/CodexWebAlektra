@@ -10,7 +10,9 @@ import { prisma } from "@/lib/prisma";
 import { deletePublicUpload, getFiles, saveUpload, uploadRules } from "@/lib/uploads";
 import { sendOrderNotifications } from "@/lib/notifications";
 import { getDatasetStats, searchBangladeshLocation } from "@/lib/bangladesh-location-service";
-import { sendOrderConfirmationEmail, testSmtpConnection } from "@/lib/mail";
+import { sendCustomerVerificationEmail, sendOrderConfirmationEmail, testSmtpConnection } from "@/lib/mail";
+import { legalDefaults } from "@/lib/legal-documents";
+import { createEmailVerificationToken } from "@/lib/customer-auth";
 
 async function requireAdmin() {
   const session = await auth();
@@ -72,6 +74,7 @@ function firstProductValidationMessage(error: z.ZodError) {
     brand: "Brand / manufacturer is required.",
     categoryId: "Category is required.",
     priceBdt: "Price must be a valid number greater than or equal to 0.",
+    compareAtPriceBdt: "Old price must be a valid number greater than or equal to 0.",
     stockQuantity: "Stock quantity must be a valid whole number greater than or equal to 0.",
     shortDescription: "Short description is required.",
     technicalDescription: "Full description must be valid text.",
@@ -91,6 +94,7 @@ export async function saveProduct(formData: FormData) {
     brand: z.string().min(1),
     categoryId: z.string().min(1),
     priceBdt: z.coerce.number().nonnegative(),
+    compareAtPriceBdt: z.preprocess((value) => value === "" ? undefined : value, z.coerce.number().nonnegative().optional()),
     stockQuantity: z.coerce.number().int().nonnegative(),
     shortDescription: z.string().min(10),
     technicalDescription: z.string().optional(),
@@ -112,6 +116,7 @@ export async function saveProduct(formData: FormData) {
     brand: text(formData.get("brand")),
     categoryId: text(formData.get("categoryId")),
     priceBdt: text(formData.get("priceBdt")),
+    compareAtPriceBdt: text(formData.get("compareAtPriceBdt")),
     stockQuantity: text(formData.get("stockQuantity")),
     shortDescription: text(formData.get("shortDescription")),
     technicalDescription: text(formData.get("technicalDescription")),
@@ -167,6 +172,7 @@ export async function saveProduct(formData: FormData) {
     brand: data.brand,
     categoryId: data.categoryId,
     priceBdt: data.priceBdt,
+    compareAtPriceBdt: data.compareAtPriceBdt ?? null,
     stockQuantity: data.stockQuantity,
     shortDescription: data.shortDescription,
     technicalDescription: data.technicalDescription || data.shortDescription,
@@ -298,12 +304,18 @@ export async function saveResourceCategory(formData: FormData) {
     id: z.string().optional(),
     name: z.string().min(2),
     slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
-    description: z.string().min(3)
+    description: z.string().min(3),
+    icon: z.string().optional(),
+    sortOrder: z.coerce.number().int().default(0),
+    status: z.nativeEnum(PublishStatus)
   }).parse({
     id: optional(formData.get("id")) ?? undefined,
     name: text(formData.get("name")),
     slug: text(formData.get("slug")),
-    description: text(formData.get("description"))
+    description: text(formData.get("description")) || "Resource category",
+    icon: text(formData.get("icon")),
+    sortOrder: text(formData.get("sortOrder")) || "0",
+    status: status(formData.get("status") || "PUBLISHED")
   });
   if (data.id) await prisma.resourceCategory.update({ where: { id: data.id }, data });
   else await prisma.resourceCategory.create({ data });
@@ -330,6 +342,8 @@ export async function saveResource(formData: FormData) {
     coverImageAlt: z.string().optional(),
     seoTitle: z.string().optional(),
     seoDescription: z.string().optional(),
+    isFeatured: z.boolean().default(false),
+    readTimeMinutes: z.coerce.number().int().positive().optional(),
     status: z.nativeEnum(PublishStatus)
   }).parse({
     id: optional(formData.get("id")) ?? undefined,
@@ -342,6 +356,8 @@ export async function saveResource(formData: FormData) {
     coverImageAlt: text(formData.get("coverImageAlt")),
     seoTitle: text(formData.get("seoTitle")),
     seoDescription: text(formData.get("seoDescription")),
+    isFeatured: formData.get("isFeatured") === "on",
+    readTimeMinutes: text(formData.get("readTimeMinutes")) || undefined,
     status: status(formData.get("status"))
   });
   const existing = data.id ? await prisma.resourceArticle.findUnique({ where: { id: data.id } }) : null;
@@ -369,7 +385,8 @@ export async function saveResource(formData: FormData) {
     coverImageAlt: data.coverImageAlt || null,
     seoTitle: data.seoTitle || null,
     seoDescription: data.seoDescription || null,
-    publishedAt: data.status === PublishStatus.PUBLISHED ? new Date() : null,
+    readTimeMinutes: data.readTimeMinutes || estimateReadTime(data.body),
+    publishedAt: data.status === PublishStatus.PUBLISHED ? existing?.publishedAt ?? new Date() : null,
     authorId: user.id
   };
   const article = data.id
@@ -377,6 +394,11 @@ export async function saveResource(formData: FormData) {
     : await prisma.resourceArticle.create({ data: articleData });
   refresh("/", "/resources", `/resources/${article.slug}`, "/admin/resources");
   redirect("/admin/resources");
+}
+
+function estimateReadTime(body: string) {
+  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.ceil(words / 180));
 }
 
 export async function deleteResource(formData: FormData) {
@@ -584,6 +606,7 @@ export async function saveFooterSettings(formData: FormData) {
   const data = z.object({
     contactEmail: z.string().email("Enter a valid contact email."),
     contactPhone: z.string().min(6, "Enter a valid phone number."),
+    secondaryPhone: z.string().optional(),
     address: z.string().min(3, "Enter the footer address."),
     facebookUrl: z.string().url("Enter a valid Facebook URL.").or(z.literal("")).optional(),
     linkedinUrl: z.string().url("Enter a valid LinkedIn URL.").or(z.literal("")).optional(),
@@ -594,6 +617,7 @@ export async function saveFooterSettings(formData: FormData) {
   }).parse({
     contactEmail: text(formData.get("contactEmail")),
     contactPhone: text(formData.get("contactPhone")),
+    secondaryPhone: text(formData.get("secondaryPhone")),
     address: text(formData.get("address")),
     facebookUrl: text(formData.get("facebookUrl")),
     linkedinUrl: text(formData.get("linkedinUrl")),
@@ -630,6 +654,25 @@ export async function deleteContact(formData: FormData) {
   await requireAdmin();
   await prisma.contactSubmission.delete({ where: { id: z.string().parse(formData.get("id")) } });
   refresh("/admin/contacts");
+}
+
+export async function toggleCustomerActive(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().min(1).parse(formData.get("id"));
+  const isActive = text(formData.get("isActive")) === "true";
+  await prisma.customer.update({ where: { id }, data: { isActive } });
+  refresh("/admin/customers");
+}
+
+export async function resendCustomerVerification(formData: FormData) {
+  await requireAdmin();
+  const id = z.string().min(1).parse(formData.get("id"));
+  const customer = await prisma.customer.findUnique({ where: { id } });
+  if (customer && !customer.emailVerified) {
+    const token = await createEmailVerificationToken(customer.id);
+    await sendCustomerVerificationEmail({ email: customer.email, fullName: customer.fullName, token }).catch(() => null);
+  }
+  refresh("/admin/customers");
 }
 
 export async function updateOrderStatus(formData: FormData) {
@@ -876,6 +919,52 @@ export async function saveShopLegalContent(formData: FormData) {
   });
   refresh("/shop/terms", "/shop/refund-policy", "/admin/shop/legal", "/checkout");
   redirect(`/admin/shop/legal?saved=${data.policyKey}`);
+}
+
+export async function saveLegalDocument(formData: FormData) {
+  const user = await requireAdmin();
+  const data = z.object({
+    documentKey: z.enum(["privacy", "terms-of-use", "sales-and-refunds", "legal"]),
+    title: z.string().min(2),
+    slug: z.string().min(2),
+    content: z.string().min(100),
+    version: z.string().min(1),
+    effectiveDate: z.string().optional(),
+    status: z.nativeEnum(PublishStatus)
+  }).parse({
+    documentKey: text(formData.get("documentKey")),
+    title: text(formData.get("title")),
+    slug: text(formData.get("slug")),
+    content: text(formData.get("content")),
+    version: text(formData.get("version")) || "v1.0",
+    effectiveDate: text(formData.get("effectiveDate")),
+    status: status(formData.get("status"))
+  });
+  await prisma.legalDocument.upsert({
+    where: { documentKey: data.documentKey },
+    update: {
+      title: data.title,
+      slug: data.slug,
+      content: data.content,
+      version: data.version,
+      effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+      status: data.status,
+      updatedBy: user.email ?? user.name ?? null
+    },
+    create: {
+      documentKey: data.documentKey,
+      title: data.title,
+      slug: data.slug,
+      content: data.content,
+      version: data.version,
+      effectiveDate: data.effectiveDate ? new Date(data.effectiveDate) : null,
+      status: data.status,
+      updatedBy: user.email ?? user.name ?? null
+    }
+  });
+  const paths = Object.values(legalDefaults).map((document) => `/${document.slug}`);
+  refresh("/", "/thermal", "/sparkle", "/mapping", "/shop", "/site-map", "/admin/legal", ...paths);
+  redirect(`/admin/legal?saved=${data.documentKey}`);
 }
 
 export async function saveMessagingIntegration(formData: FormData) {

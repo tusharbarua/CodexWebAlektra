@@ -33,15 +33,17 @@ export function renderPolicyPointsText(content: string) {
 
 function parsePolicyBlock(block: string): PolicyPoint {
   const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const first = lines[0] ?? "";
-  const match = first.match(/^(\d+)\.\s*(.+?)(?::)?$/);
+  const first = stripUnsafeText(lines[0] ?? "");
+  const match = first.match(/^(\d+)\.\s*(.+?)(?::\s*(.*))?$/);
   if (!match) {
     return { number: "", title: "", body: stripUnsafeText(block) };
   }
+  const inlineBody = match[3] ? stripUnsafeText(match[3]) : "";
+  const restBody = stripUnsafeText(lines.slice(1).join(" "));
   return {
     number: match[1],
     title: stripUnsafeText(match[2]).replace(/:$/, ""),
-    body: stripUnsafeText(lines.slice(1).join(" "))
+    body: [inlineBody, restBody].filter(Boolean).join(" ")
   };
 }
 

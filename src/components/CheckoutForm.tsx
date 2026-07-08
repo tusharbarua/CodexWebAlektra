@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { FocusEventHandler } from "react";
-import { AlertCircle, CheckCircle2, CreditCard, MessageSquareText } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, CreditCard, MessageSquareText } from "lucide-react";
 import { CartItem, CART_UPDATED_EVENT, cartSummary, readCart, writeCart } from "@/lib/cart";
 import { PolicyFormattedText } from "@/components/PolicyFormattedText";
 import {
@@ -81,26 +81,54 @@ type SelectedLocation = {
   postalCode: string;
 };
 
+type CheckoutCustomerProfile = {
+  fullName: string;
+  email: string;
+  mobileNumber: string | null;
+};
+
+type CheckoutSavedAddress = {
+  id: string;
+  recipientName: string;
+  mobileNumber: string;
+  divisionId: string | null;
+  divisionName: string;
+  districtId: string | null;
+  districtName: string;
+  upazilaId: string | null;
+  upazilaName: string;
+  addressLine: string;
+  postalCode: string | null;
+  deliveryNotes: string | null;
+  isDefault: boolean;
+};
+
 export function CheckoutForm({
   deliverySettings,
   checkoutSettings,
-  legalSettings
+  legalSettings,
+  customerProfile,
+  savedAddresses = []
 }: {
   deliverySettings: DeliverySettings;
   checkoutSettings: CheckoutSettings;
   legalSettings: LegalSettings;
+  customerProfile?: CheckoutCustomerProfile | null;
+  savedAddresses?: CheckoutSavedAddress[];
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState<CheckoutErrors>({});
   const [showWarning, setShowWarning] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState(deliverySettings.courierEnabled ? "COURIER" : "PICKUP");
-  const [mobile, setMobile] = useState("");
+  const [mobile, setMobile] = useState(customerProfile?.mobileNumber ?? "");
   const [otp, setOtp] = useState("");
   const [otpVerified, setOtpVerified] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [otpMessage, setOtpMessage] = useState("");
   const [manualAddressFallback, setManualAddressFallback] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [createAccount, setCreateAccount] = useState(false);
   const [locationMessage, setLocationMessage] = useState("");
   const [divisions, setDivisions] = useState<LocationOption[]>([]);
   const [districts, setDistricts] = useState<LocationOption[]>([]);
@@ -137,6 +165,10 @@ export function CheckoutForm({
       window.removeEventListener("storage", sync);
     };
   }, []);
+
+  useEffect(() => {
+    if (customerProfile?.mobileNumber) setMobile(customerProfile.mobileNumber);
+  }, [customerProfile?.mobileNumber]);
 
   useEffect(() => {
     if (deliveryMethod !== "COURIER" || manualAddressFallback || divisions.length) return;
@@ -404,6 +436,8 @@ export function CheckoutForm({
       deliveryNotes: form.get("deliveryNotes") || undefined,
       address: shippingAddress,
       termsAccepted: form.get("termsAccepted") === "on",
+      saveAddress: form.get("saveAddress") === "on",
+      createAccount: form.get("createAccount") === "on",
       termsVersion: legalSettings.termsVersion,
       refundPolicyVersion: legalSettings.refundPolicyVersion,
       items: items.map((item) => ({ productId: item.id, quantity: item.quantity }))
@@ -447,6 +481,10 @@ export function CheckoutForm({
     if (!String(form.get("customerName") ?? "").trim()) nextErrors.customerName = "Please enter your full name.";
     const email = String(form.get("customerEmail") ?? "");
     if (!isValidOptionalEmail(email)) nextErrors.customerEmail = EMAIL_VALIDATION_MESSAGE;
+    if (!customerProfile && String(form.get("createAccount") ?? "") === "on") {
+      if (!email.trim()) nextErrors.customerEmail = "Email address is required to create an account.";
+      else if (!isValidOptionalEmail(email)) nextErrors.customerEmail = "Please enter a valid email address to create an account.";
+    }
     const mobileError = validateMobile(mobile);
     if (mobileError) nextErrors.customerPhone = mobileError;
     if (otpRequired && !otpVerified) nextErrors.otp = OTP_REQUIRED_MESSAGE;
@@ -502,6 +540,31 @@ export function CheckoutForm({
       city: upazilaName,
       pickupAddress: deliverySettings.pickupAddress
     };
+  }
+
+  function applySavedAddress(addressId: string) {
+    const address = savedAddresses.find((item) => item.id === addressId);
+    if (!address || !formRef.current) return;
+    setDeliveryMethod("COURIER");
+    setManualAddressFallback(true);
+    window.setTimeout(() => {
+      setNamedValue("manualDivision", address.divisionName);
+      setNamedValue("manualDistrict", address.districtName);
+      setNamedValue("manualUpazila", address.upazilaName);
+      setNamedValue("manualPostalCode", address.postalCode ?? "");
+      setNamedValue("addressLine", address.addressLine);
+      setNamedValue("deliveryNotes", address.deliveryNotes ?? "");
+      setMobile(address.mobileNumber);
+      updateError("manualDivision", "");
+      updateError("manualDistrict", "");
+      updateError("manualUpazila", "");
+      updateError("addressLine", "");
+    }, 0);
+  }
+
+  function setNamedValue(name: string, value: string) {
+    const input = formRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+    if (input) input.value = value;
   }
 
   function focusFirstError(nextErrors: CheckoutErrors) {
@@ -567,7 +630,7 @@ export function CheckoutForm({
         <section>
           <h2>Customer information</h2>
           <div className="form-grid">
-            <Field label="Full name" name="customerName" required error={errors.customerName} onBlur={(event) => updateError("customerName", event.currentTarget.value.trim() ? "" : "Please enter your full name.")} />
+            <Field label="Full name" name="customerName" defaultValue={customerProfile?.fullName ?? ""} required error={errors.customerName} onBlur={(event) => updateError("customerName", event.currentTarget.value.trim() ? "" : "Please enter your full name.")} />
             <label className={`field ${errors.customerPhone ? "field-invalid" : ""}`}>
               <span>Mobile number</span>
               <input
@@ -585,7 +648,7 @@ export function CheckoutForm({
               />
               {errors.customerPhone ? <small className="field-error">{errors.customerPhone}</small> : null}
             </label>
-            <Field label="Email address (optional)" name="customerEmail" inputMode="email" error={errors.customerEmail} onBlur={(event) => updateError("customerEmail", isValidOptionalEmail(event.currentTarget.value) ? "" : EMAIL_VALIDATION_MESSAGE)} />
+            <Field label="Email address (optional)" name="customerEmail" inputMode="email" defaultValue={customerProfile?.email ?? ""} error={errors.customerEmail} onBlur={(event) => updateError("customerEmail", isValidOptionalEmail(event.currentTarget.value) ? "" : EMAIL_VALIDATION_MESSAGE)} />
             <Field label="Institution / company (optional)" name="companyName" />
           </div>
           {otpRequired ? <div className={`otp-panel ${errors.otp ? "field-invalid" : ""}`}>
@@ -601,8 +664,22 @@ export function CheckoutForm({
         <section>
           <h2>Delivery method</h2>
           <div className="delivery-option-grid">
-            {deliverySettings.courierEnabled ? <label className={deliveryMethod === "COURIER" ? "delivery-option active" : "delivery-option"}><input type="radio" name="deliveryMethod" checked={deliveryMethod === "COURIER"} onChange={() => setDeliveryMethod("COURIER")} /> <strong>Delivery via courier</strong><span>Minimum delivery charge {money(deliverySettings.courierMinimumChargeBdt)}</span></label> : null}
-            {deliverySettings.pickupEnabled ? <label className={deliveryMethod === "PICKUP" ? "delivery-option active" : "delivery-option"}><input type="radio" name="deliveryMethod" checked={deliveryMethod === "PICKUP"} onChange={() => setDeliveryMethod("PICKUP")} /> <strong>{deliverySettings.pickupLabel}</strong><span>{deliverySettings.pickupAddress} · {money(deliverySettings.pickupChargeBdt)}</span></label> : null}
+            {deliverySettings.courierEnabled ? (
+              <label className={deliveryMethod === "COURIER" ? "delivery-option active" : "delivery-option"}>
+                <input type="radio" name="deliveryMethod" checked={deliveryMethod === "COURIER"} onChange={() => setDeliveryMethod("COURIER")} />
+                <strong>Delivery via courier</strong>
+                <span>Minimum delivery charge {money(deliverySettings.courierMinimumChargeBdt)}</span>
+                {deliveryMethod === "COURIER" ? <span className="checkout-select-tick" aria-hidden="true"><Check size={14} /></span> : null}
+              </label>
+            ) : null}
+            {deliverySettings.pickupEnabled ? (
+              <label className={deliveryMethod === "PICKUP" ? "delivery-option active" : "delivery-option"}>
+                <input type="radio" name="deliveryMethod" checked={deliveryMethod === "PICKUP"} onChange={() => setDeliveryMethod("PICKUP")} />
+                <strong>{deliverySettings.pickupLabel}</strong>
+                <span>{deliverySettings.pickupAddress} · {money(deliverySettings.pickupChargeBdt)}</span>
+                {deliveryMethod === "PICKUP" ? <span className="checkout-select-tick" aria-hidden="true"><Check size={14} /></span> : null}
+              </label>
+            ) : null}
           </div>
           {deliveryMethod === "PICKUP" ? <p className="field-help">Pickup from {deliverySettings.pickupAddress}. We will contact you when the order is ready.</p> : null}
         </section>
@@ -610,6 +687,21 @@ export function CheckoutForm({
         {deliveryMethod === "COURIER" ? (
           <section>
             <h2>Shipping address</h2>
+            {savedAddresses.length ? (
+              <div className="checkout-saved-addresses">
+                <label className="field">
+                  <span>Saved delivery address</span>
+                  <select defaultValue="" onChange={(event) => applySavedAddress(event.target.value)}>
+                    <option value="">Select a saved address</option>
+                    {savedAddresses.map((address) => (
+                      <option value={address.id} key={address.id}>
+                        {address.isDefault ? "Default - " : ""}{address.recipientName}, {address.upazilaName}, {address.districtName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : null}
             <div className="location-search-box">
               <label className="field">
                 <span>Can&apos;t find your area? Search Bangladesh location</span>
@@ -682,19 +774,57 @@ export function CheckoutForm({
               </label>
               <Field label="Delivery notes (optional)" name="deliveryNotes" />
             </div>
+            {customerProfile ? (
+              <label className="check-field">
+                <input name="saveAddress" type="checkbox" />
+                <span>Save this address for future orders</span>
+              </label>
+            ) : null}
           </section>
         ) : <input type="hidden" name="deliveryNotes" value="Warehouse pickup" />}
+
+        {!customerProfile ? (
+          <label className={`checkout-account-create-row ${createAccount ? "is-checked" : ""}`}>
+            <input
+              name="createAccount"
+              type="checkbox"
+              checked={createAccount}
+              onChange={(event) => {
+                setCreateAccount(event.currentTarget.checked);
+                if (!event.currentTarget.checked && errors.customerEmail === "Email address is required to create an account.") updateError("customerEmail", "");
+              }}
+            />
+            <span className="checkout-custom-checkbox" aria-hidden="true">{createAccount ? <Check size={14} /> : null}</span>
+            <span>Create an Alektra account to track this order and save my delivery details.</span>
+          </label>
+        ) : null}
 
         <section className="form-grid">
           <Field label="Coupon" name="couponCode" />
           <label className="field"><span>Payment</span><select name="paymentMethod" defaultValue="CASH_ON_DELIVERY"><option value="CASH_ON_DELIVERY">Cash on delivery</option><option value="SSLCOMMERZ">SSLCommerz</option></select></label>
         </section>
 
-        <label className={`check-field checkout-legal-acceptance ${errors.termsAccepted ? "field-invalid" : ""}`}>
-          <input name="termsAccepted" type="checkbox" onChange={(event) => updateError("termsAccepted", event.currentTarget.checked ? "" : "Please accept the Shop Terms & Conditions and Refund Policy before placing your order.")} />
-          <span>I agree to Alektra Renewable <button className="checkout-policy-link" type="button" onClick={() => setLegalModal("terms")}>Shop Terms & Conditions</button> and <button className="checkout-policy-link" type="button" onClick={() => setLegalModal("refund")}>Refund Policy</button>.</span>
-          {errors.termsAccepted ? <small className="field-error">{errors.termsAccepted}</small> : null}
-        </label>
+        <div className={`checkout-legal-card ${errors.termsAccepted ? "field-invalid" : ""}`}>
+          <label className={`checkout-legal-row ${termsAccepted ? "is-checked" : ""}`}>
+            <input
+              name="termsAccepted"
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => {
+                setTermsAccepted(event.currentTarget.checked);
+                updateError("termsAccepted", event.currentTarget.checked ? "" : "Please accept the Shop Terms & Conditions and Refund Policy before placing your order.");
+              }}
+            />
+            <span className="checkout-custom-checkbox" aria-hidden="true">{termsAccepted ? <Check size={14} /> : null}</span>
+            <span className="checkout-legal-text">
+              I agree to Alektra Renewable Shop{" "}
+              <button className="checkout-policy-link" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLegalModal("terms"); }}>Terms & Conditions</button>
+              {" "}and{" "}
+              <button className="checkout-policy-link" type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLegalModal("refund"); }}>Refund Policy</button>.
+            </span>
+          </label>
+          {errors.termsAccepted ? <p className="checkout-legal-error">{errors.termsAccepted}</p> : null}
+        </div>
 
         {otpRequired && !otpVerified ? <p className="field-help">Verify your mobile number with OTP to enable order confirmation.</p> : null}
         <button className="btn wide checkout-submit" type="submit" disabled={!items.length || (otpRequired && !otpVerified)}>
@@ -774,7 +904,8 @@ function Field({
   inputMode,
   required = false,
   error,
-  onBlur
+  onBlur,
+  defaultValue = ""
 }: {
   label: string;
   name: string;
@@ -783,11 +914,12 @@ function Field({
   required?: boolean;
   error?: string;
   onBlur?: FocusEventHandler<HTMLInputElement>;
+  defaultValue?: string;
 }) {
   return (
     <label className={`field ${error ? "field-invalid" : ""}`}>
       <span>{label}</span>
-      <input name={name} type={type} inputMode={inputMode} required={required} aria-invalid={Boolean(error)} onBlur={onBlur} />
+      <input name={name} type={type} inputMode={inputMode} required={required} aria-invalid={Boolean(error)} onBlur={onBlur} defaultValue={defaultValue} />
       {error ? <small className="field-error">{error}</small> : null}
     </label>
   );

@@ -51,8 +51,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <h1 className="product-detail-title">{product.name}</h1>
             <p className="product-detail-meta">SKU {product.sku} | Model {product.model} | {product.brand}</p>
             <div className="product-detail-price-row">
-              <strong>{money(Number(product.priceBdt))}</strong>
-              {product.compareAtPriceBdt ? <span>{money(Number(product.compareAtPriceBdt))}</span> : null}
+              <strong className="shop-current-price">{money(Number(product.priceBdt))}</strong>
+              {product.compareAtPriceBdt && Number(product.compareAtPriceBdt) > Number(product.priceBdt) ? <span className="shop-old-price">{money(Number(product.compareAtPriceBdt))}</span> : null}
             </div>
             <p className="product-short-description">{product.shortDescription || "Product details will be updated soon."}</p>
 
@@ -90,7 +90,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             <Link href={`/shop?category=${product.category.slug}`}>View category</Link>
           </div>
           <div className="related-products-grid">
-            {related.map((item) => <ProductCard key={item.id} product={{ id: item.id, name: item.name, slug: item.slug, sku: item.sku, model: item.model, brand: item.brand, featured: item.isFeatured, compareAtPrice: item.compareAtPriceBdt ? Number(item.compareAtPriceBdt) : null, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage, description: item.shortDescription }} />)}
+            {related.map((item) => <ProductCard key={item.id} product={{ id: item.id, name: item.name, slug: item.slug, sku: item.sku, model: item.model, brand: item.brand, featured: item.isFeatured, compareAtPrice: item.compareAtPriceBdt ? Number(item.compareAtPriceBdt) : null, category: item.category.name, price: Number(item.priceBdt), stock: item.stockQuantity, image: item.images[0]?.imagePath ?? fallbackImage }} />)}
           </div>
         </section> : null}
         <div className="shop-legal-links">

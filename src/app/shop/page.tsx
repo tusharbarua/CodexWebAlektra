@@ -59,7 +59,24 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
   const [products, brands] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true, images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sku: true,
+        model: true,
+        brand: true,
+        isFeatured: true,
+        priceBdt: true,
+        compareAtPriceBdt: true,
+        stockQuantity: true,
+        category: { select: { name: true } },
+        images: {
+          select: { imagePath: true },
+          orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+          take: 1
+        }
+      },
       orderBy: orderBy(params.sort)
     }),
     prisma.product.findMany({
@@ -149,8 +166,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                   category: product.category.name,
                   price: Number(product.priceBdt),
                   stock: product.stockQuantity,
-                  image: product.images[0]?.imagePath ?? fallbackImage,
-                  description: product.shortDescription
+                  image: product.images[0]?.imagePath ?? fallbackImage
                 }} />)}
               </div>
             ) : (

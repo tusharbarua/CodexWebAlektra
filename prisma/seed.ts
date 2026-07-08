@@ -1,6 +1,7 @@
 import { PageKey, Prisma, PrismaClient, PublishStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { comprehensivePoints, standardPoints, thermalAnomalies } from "../src/data/thermal";
+import { legalDefaults } from "../src/lib/legal-documents";
 import { defaultRefundContent, defaultTermsContent } from "../src/lib/shop-legal";
 
 const prisma = new PrismaClient();
@@ -19,7 +20,7 @@ async function main() {
     }
   });
 
-  const permissionModules = ["Dashboard", "Pages", "Products", "Categories", "Orders", "Projects", "Resources", "Hero Media", "Footer Settings", "SEO", "Integrations", "Thermal Inspections", "Contact Submissions", "Users", "Roles", "Site Settings"];
+  const permissionModules = ["Dashboard", "Pages", "Products", "Categories", "Orders", "Projects", "Resources", "Hero Media", "Footer Settings", "Legal Content", "SEO", "Integrations", "Thermal Inspections", "Contact Submissions", "Users", "Roles", "Site Settings"];
   const permissionActions = ["View", "Create", "Edit", "Delete", "Publish", "Export", "Manage Settings"];
   const defaultRoles = ["Super Admin", "Director", "Admin", "Sales", "Engineer", "HR", "Accounts", "Store Manager", "Viewer"];
   const roleRows = new Map<string, string>();
@@ -157,24 +158,32 @@ async function main() {
   }
 
   const categoryNames = [
-    ["Solar Panels", "solar-panels", "Module types, efficiency, degradation, warranties and bankability."],
-    ["Inverters", "inverters", "String, central and hybrid inverter selection, MPPT design and monitoring."],
-    ["Mounting Structures", "mounting-structures", "Racking, roof loading, corrosion protection and wind-safe installation."],
-    ["Cables", "cables", "DC/AC cable sizing, protection, routing and loss control."],
-    ["Net Metering", "net-metering", "Utility coordination, export-import meters and billing economics."],
-    ["Monitoring", "monitoring", "Plant visibility, alerting, PR tracking and inverter platform integrations."],
-    ["Battery/ESS", "battery-ess", "Storage applications, backup, peak shaving and hybrid solar architecture."],
-    ["Solar Economics", "solar-economics", "Savings, payback, tariff escalation and environmental benefits."]
+    ["Inverter", "inverters", "String, central and hybrid inverter selection, MPPT design and monitoring.", "Zap", 10],
+    ["ESS", "battery-ess", "Storage applications, backup, peak shaving and hybrid solar architecture.", "BatteryCharging", 20],
+    ["Design", "design", "Project design, sizing, energy modeling and engineering decisions.", "CircuitBoard", 30],
+    ["Mounting", "mounting-structures", "Racking, roof loading, corrosion protection and wind-safe installation.", "Boxes", 40],
+    ["Cable", "cables", "DC/AC cable sizing, protection, routing and loss control.", "Cable", 50],
+    ["Solar Module", "solar-panels", "Module types, efficiency, degradation, warranties and bankability.", "Sun", 60],
+    ["Tracker", "tracker", "Solar tracker concepts, yield impact and utility-scale applications.", "Activity", 70],
+    ["BOS", "bos", "Balance-of-system components, protection, combiner boxes and accessories.", "PanelTop", 80],
+    ["Net Metering", "net-metering", "Utility coordination, export-import meters and billing economics.", "Gauge", 90],
+    ["O&M", "monitoring", "Plant visibility, alerting, PR tracking and inverter platform integrations.", "MonitorCheck", 100],
+    ["Thermal Inspection", "thermal-inspection", "Aerial thermal inspection, anomaly detection and asset diagnostics.", "Radar", 110],
+    ["Cleaning", "cleaning", "Solar panel cleaning, soiling loss and long-term performance care.", "Droplets", 120],
+    ["Mapping", "mapping", "Drone mapping, photogrammetry, LiDAR and digital twin documentation.", "Map", 130],
+    ["Others", "others", "Additional renewable-energy topics and practical project guidance.", "BookOpen", 140],
+    ["Solar Economics", "solar-economics", "Savings, payback, tariff escalation and environmental benefits.", "LineChart", 150]
   ];
 
   const categories = new Map<string, string>();
-  for (const [name, slug, description] of categoryNames) {
+  for (const [name, slug, description, icon, sortOrder] of categoryNames) {
+    const categorySlug = String(slug);
     const category = await prisma.resourceCategory.upsert({
-      where: { slug },
-      update: {},
-      create: { name, slug, description }
+      where: { slug: categorySlug },
+      update: { name: String(name), description: String(description), icon: String(icon), sortOrder: Number(sortOrder), status: PublishStatus.PUBLISHED },
+      create: { name: String(name), slug: categorySlug, description: String(description), icon: String(icon), sortOrder: Number(sortOrder), status: PublishStatus.PUBLISHED }
     });
-    categories.set(slug, category.id);
+    categories.set(categorySlug, category.id);
   }
 
   const articles = [
@@ -183,6 +192,7 @@ async function main() {
       slug: "choosing-solar-modules-industrial-roofs",
       category: "solar-panels",
       excerpt: "A practical guide to module type, efficiency, degradation and warranty fit for Bangladeshi C&I projects.",
+      isFeatured: true,
       body:
         "A well-designed rooftop solar plant starts with module selection. Alektra evaluates module efficiency, temperature coefficient, product warranty, linear performance warranty, mechanical load rating and bankability. For industrial roofs, module choice must also fit available roof area, shading profile, maintenance access and mounting layout. High-efficiency mono PERC, TOPCon and bifacial modules can improve output where roof area is constrained, but the best choice is the one that balances yield, lifecycle cost and dependable supply."
     },
@@ -221,6 +231,8 @@ async function main() {
         slug: article.slug,
         excerpt: article.excerpt,
         body: article.body,
+        isFeatured: "isFeatured" in article ? Boolean(article.isFeatured) : false,
+        readTimeMinutes: Math.max(1, Math.ceil(article.body.split(/\s+/).length / 180)),
         status: PublishStatus.PUBLISHED,
         publishedAt: new Date(),
         categoryId: categories.get(article.category)!,
@@ -450,8 +462,9 @@ async function main() {
     where: { singletonKey: "footer" },
     update: {
       contactEmail: "contact@alektraepc.com",
-      contactPhone: "+880 1735954 844",
-      address: "Dhaka, Bangladesh",
+      contactPhone: "+880 1735 954 844",
+      secondaryPhone: "+880 1877 572 234",
+      address: "Chattogram | Dhaka | Bangladesh",
       footerDescription:
         "Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.",
       copyrightText: "Copyright (c) Alektra Renewable. All rights reserved."
@@ -459,8 +472,9 @@ async function main() {
     create: {
       singletonKey: "footer",
       contactEmail: "contact@alektraepc.com",
-      contactPhone: "+880 1735954 844",
-      address: "Dhaka, Bangladesh",
+      contactPhone: "+880 1735 954 844",
+      secondaryPhone: "+880 1877 572 234",
+      address: "Chattogram | Dhaka | Bangladesh",
       footerDescription:
         "Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.",
       copyrightText: "Copyright (c) Alektra Renewable. All rights reserved."
@@ -608,6 +622,29 @@ async function main() {
     create: { policyKey: "refund", title: "Alektra Renewable Shop Refund, Return & Replacement Policy", slug: "shop-refund-policy", content: defaultRefundContent, version: "v1.0", effectiveDate: new Date(), status: PublishStatus.PUBLISHED }
   });
 
+  for (const document of Object.values(legalDefaults)) {
+    await prisma.legalDocument.upsert({
+      where: { documentKey: document.documentKey },
+      update: {
+        title: document.title,
+        slug: document.slug,
+        content: document.content,
+        version: "v1.0",
+        status: PublishStatus.PUBLISHED
+      },
+      create: {
+        documentKey: document.documentKey,
+        title: document.title,
+        slug: document.slug,
+        content: document.content,
+        version: "v1.0",
+        effectiveDate: new Date(),
+        status: PublishStatus.PUBLISHED,
+        updatedBy: "seed"
+      }
+    });
+  }
+
   await prisma.messagingIntegration.upsert({
     where: { singletonKey: "default" },
     update: {},
@@ -658,7 +695,7 @@ async function seedSubdivisionPages() {
   await seedThermalPage();
   await seedSparklePage();
   await seedMappingPage();
-  await seedSimpleSubdivision(PageKey.epc, "Alektra EPC", "epc", "Solar EPC in Bangladesh", "Rooftop, industrial and commercial solar EPC.", "Alektra EPC designs, engineers, procures, installs and commissions solar plants with net metering and monitoring support.");
+  await seedEpcPage();
 }
 
 async function upsertPage(pageKey: PageKey, title: string, slug: string, metaTitle: string, metaDescription: string) {
@@ -704,6 +741,223 @@ async function replaceItems(sectionId: string, items: Array<{
   if (existing > 0) return;
   await prisma.pageSectionItem.createMany({
     data: items.map((item) => ({ sectionId, isPublished: true, ...item }))
+  });
+}
+
+async function seedEpcPage() {
+  const page = await upsertPage(
+    PageKey.epc,
+    "Alektra Renewable",
+    "epc",
+    "Alektra Renewable | Premium Solar EPC Bangladesh",
+    "Professional solar EPC, hybrid energy systems, monitoring, thermal inspection, cleaning, mapping, and performance care for commercial and industrial clients."
+  );
+
+  await prisma.heroMedia.updateMany({ where: { pageKey: PageKey.epc }, data: { isPrimary: false } });
+  const epcHeroMedia = await prisma.heroMedia.findFirst({ where: { pageKey: PageKey.epc, filePath: "/uploads/hero/epc/epc-hero-video.mp4" } });
+  if (epcHeroMedia) {
+    await prisma.heroMedia.update({
+      where: { id: epcHeroMedia.id },
+      data: { title: "Alektra Renewable EPC Hero Video", mediaType: "video", url: "/uploads/hero/epc/epc-hero-video.mp4", filePath: "/uploads/hero/epc/epc-hero-video.mp4", alt: "Alektra Renewable solar EPC hero video", altText: "Alektra Renewable solar EPC hero video", isPrimary: true, isPublished: true, status: PublishStatus.PUBLISHED }
+    });
+  } else {
+    await prisma.heroMedia.create({
+      data: {
+        pageKey: PageKey.epc,
+        title: "Alektra Renewable EPC Hero Video",
+        mediaType: "video",
+        url: "/uploads/hero/epc/epc-hero-video.mp4",
+        filePath: "/uploads/hero/epc/epc-hero-video.mp4",
+        alt: "Alektra Renewable solar EPC hero video",
+        altText: "Alektra Renewable solar EPC hero video",
+        mimeType: "video/mp4",
+        isPrimary: true,
+        isPublished: true,
+        status: PublishStatus.PUBLISHED,
+        sortOrder: 0
+      }
+    });
+  }
+
+  const hero = await upsertSection(page.id, {
+    sectionKey: "hero",
+    sectionType: "epc-hero",
+    title: "Alektra Renewable",
+    subtitle: "Engineering Reliable Solar Energy Systems for Industries, Commercial Buildings, and Future-Ready Businesses",
+    body: "Alektra Renewable delivers professional solar EPC solutions, hybrid energy systems, monitoring support, thermal inspection, cleaning, mapping, and long-term performance care for commercial and industrial clients. We combine engineering precision, premium components, advanced digital tools, and after-sales support to help businesses generate cleaner energy with confidence.",
+    sortOrder: 10,
+    settingsJson: {
+      kicker: "Solar EPC Excellence for Bangladesh's Industrial Future",
+      primaryCtaText: "Explore Our EPC Solutions",
+      primaryCtaLink: "#solutions",
+      secondaryCtaText: "View Our Projects",
+      secondaryCtaLink: "#projects",
+      tertiaryCtaText: "Request a Proposal",
+      tertiaryCtaLink: "#proposal",
+      trustBadges: ["C&I Solar EPC", "Hybrid & ESS Ready", "Thermal Inspection", "Sparkle Cleaning", "Mapping & Digital Twin"]
+    }
+  });
+  await replaceItems(hero.id, []);
+
+  await upsertSection(page.id, {
+    sectionKey: "impact",
+    sectionType: "impact-dashboard",
+    title: "Renewable energy creating measurable change.",
+    subtitle: "Live Impact Dashboard",
+    body: "Every operating plant contributes to cleaner air, lower emissions, and a more resilient energy future for Bangladesh.",
+    sortOrder: 20
+  });
+
+  const different = await upsertSection(page.id, {
+    sectionKey: "what-makes-us-different",
+    sectionType: "feature-cards",
+    title: "What Makes Us Different",
+    subtitle: "Engineering Difference",
+    body: "Beyond installation, Alektra Renewable protects your asset, your roof, your energy performance, and your long-term confidence.",
+    sortOrder: 30
+  });
+  await replaceItems(different.id, [
+    ["We Care for Your Roof", "We prioritize roof protection and minimize unnecessary penetrations. Where anchoring is required, we follow proper waterproofing practices to help maintain roof integrity and support reliable, professional solar installation.", "ShieldCheck"],
+    ["Global Engineering Strength", "Our engineering capability is supported by experienced professionals and collaborators across borders. This helps us deliver accurate design, better technical review, and high-quality project execution with precision.", "Globe2"],
+    ["Strong Monitoring Team", "Our monitoring team keeps a close eye on system performance so that issues can be identified quickly. Clients also benefit from advanced monitoring platforms provided by leading inverter manufacturers.", "MonitorCheck"],
+    ["Quick Replacement Support", "In the event of eligible equipment failure, our support process helps clients raise replacement requests quickly and coordinate replacement units as efficiently as possible.", "PackageCheck"],
+    ["Complimentary Aerial Thermal Inspection", "Eligible clients receive 100% discount on aerial thermal inspection from our in-house Alektra Thermal team for up to 3 years, including AI-assisted reporting and anomaly detection support.", "Radar"],
+    ["Complimentary Alektra Sparkle Cleaning", "Eligible clients receive 100% discount on professional solar panel cleaning from Alektra Sparkle. Our module-safe cleaning approach helps protect performance and supports long-term asset care.", "Droplets"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const solutions = await upsertSection(page.id, {
+    sectionKey: "epc-solutions",
+    sectionType: "capability-cards",
+    title: "Solar EPC Solutions Built for Performance",
+    subtitle: "EPC Capabilities",
+    body: "Practical engineering, quality procurement, careful installation, and long-term operating support for commercial and industrial clients.",
+    sortOrder: 40
+  });
+  await replaceItems(solutions.id, [
+    ["Commercial & Industrial Rooftop Solar", "Structured solar EPC for factories, warehouses, commercial roofs, and operating facilities.", "Building2"],
+    ["Hybrid Solar & Energy Storage Systems", "Future-ready solar architectures with battery and energy storage readiness where suitable.", "BatteryCharging"],
+    ["Net Metering Support", "Documentation and technical coordination support for eligible net-metered solar projects.", "Zap"],
+    ["Electrical Design & Engineering", "Electrical layouts, component sizing, protection philosophy, and performance-focused design review.", "CircuitBoard"],
+    ["Procurement & Quality Components", "Component selection aligned with warranty, service support, project conditions, and lifecycle value.", "Boxes"],
+    ["Installation, Testing & Commissioning", "Field execution with safety supervision, testing discipline, handover documentation, and commissioning care.", "CheckCircle2"],
+    ["Remote Monitoring & O&M Support", "Monitoring support and performance follow-up for dependable long-term operation.", "MonitorCheck"],
+    ["Performance Analytics & Reporting", "Operating insight through production data, reporting, inspection, cleaning, and mapping services.", "FileText"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  await upsertSection(page.id, {
+    sectionKey: "projects-showcase",
+    sectionType: "project-showcase",
+    title: "Our Projects",
+    subtitle: "Featured Delivery",
+    body: "A premium project showcase connected to the existing project CMS. Published projects appear here automatically.",
+    sortOrder: 50
+  });
+
+  const objectives = await upsertSection(page.id, {
+    sectionKey: "objectives",
+    sectionType: "objective-cards",
+    title: "Our Objectives",
+    subtitle: "Our Direction",
+    body: "We are building Alektra Renewable to accelerate clean-energy adoption with engineering quality, responsible execution, and long-term client value.",
+    sortOrder: 60
+  });
+  await replaceItems(objectives.id, [
+    ["Promote Renewable Energy Adoption", "Our primary objective is to accelerate the adoption of renewable energy, particularly solar energy, in Bangladesh. We aim to contribute meaningfully to the country's transition toward cleaner and more sustainable energy sources.", "Sun"],
+    ["Set New Standards of Quality", "We strive to establish a new benchmark of excellence in the solar energy industry through sound engineering practices, advanced technology, quality components, structured execution, and customer-focused delivery.", "Award"],
+    ["Support Energy Independence", "We help clients reduce reliance on conventional power sources by delivering reliable and efficient solar solutions. Our systems are designed to support greater control over long-term energy costs and operational resilience.", "BatteryCharging"],
+    ["Foster Environmental Stewardship", "Environmental responsibility is central to our mission. Through wider adoption of solar energy, we aim to reduce emissions, support climate action, and contribute to a greener future for Bangladesh and beyond.", "Leaf"]
+  ].map(([title, body, icon], index) => ({ title, body, icon, sortOrder: index })));
+
+  const ecosystem = await upsertSection(page.id, {
+    sectionKey: "ecosystem",
+    sectionType: "ecosystem-cards",
+    title: "One Renewable Energy Ecosystem",
+    subtitle: "Alektra Ecosystem",
+    body: "EPC delivery, thermal inspection, module cleaning, and mapping intelligence under one connected renewable-energy platform.",
+    sortOrder: 70
+  });
+  await replaceItems(ecosystem.id, [
+    ["Alektra EPC", "Solar EPC, hybrid systems, engineering, and project execution.", "Sun", "/", "EPC"],
+    ["Alektra Thermal", "Drone-based thermal inspection, AI-assisted anomaly detection, and asset diagnostics.", "Radar", "/thermal", "Thermal"],
+    ["Alektra Sparkle", "Professional solar panel cleaning for industrial and commercial systems.", "Sparkles", "/sparkle", "Sparkle"],
+    ["Alektra Mapping", "Drone mapping, photogrammetry, LiDAR, and digital twin visualization.", "Map", "/mapping", "Mapping"]
+  ].map(([title, body, icon, linkUrl, badge], index) => ({ title, body, icon, linkUrl, badge, sortOrder: index })));
+
+  const process = await upsertSection(page.id, {
+    sectionKey: "delivery-process",
+    sectionType: "process-steps",
+    title: "How We Deliver Reliable Solar Projects",
+    subtitle: "Project Discipline",
+    body: "A structured project path helps reduce uncertainty and keeps commercial solar delivery accountable from concept to performance care.",
+    sortOrder: 80
+  });
+  await replaceItems(process.id, [
+    ["Requirement Review", "We understand energy goals, operating context, roof condition, and project constraints."],
+    ["Site Assessment & Data Collection", "Site information, load profile, structural considerations, and utility details are collected."],
+    ["Engineering Design", "The technical solution is designed around safety, yield, accessibility, and lifecycle performance."],
+    ["Proposal & Financial Evaluation", "Clients receive a clear technical and commercial view for decision-making."],
+    ["Procurement & Quality Control", "Major components are selected and coordinated around project specifications and support."],
+    ["Installation & Safety Supervision", "Field work is supervised with attention to roof protection, electrical safety, and execution quality."],
+    ["Testing, Commissioning & Handover", "The system is tested, commissioned, documented, and handed over with operating clarity."],
+    ["Monitoring, Support & Performance Care", "Long-term care is supported through monitoring, inspection, cleaning, mapping, and reporting."]
+  ].map(([title, body], index) => ({ title, body, sortOrder: index })));
+
+  const quality = await upsertSection(page.id, {
+    sectionKey: "quality-trust",
+    sectionType: "quality-points",
+    title: "Built Around Engineering, Safety, and Long-Term Performance",
+    subtitle: "Trust & Quality",
+    body: "Engineering-first design, proper component selection, compliance-minded installation, roof protection, documentation, and long-term asset care.",
+    sortOrder: 90
+  });
+  await replaceItems(quality.id, [
+    ["Engineering-first design", "CircuitBoard"],
+    ["Proper component selection", "Boxes"],
+    ["Compliance-minded installation", "ShieldCheck"],
+    ["Monitoring and after-sales support", "MonitorCheck"],
+    ["Roof protection and waterproofing care", "Droplets"],
+    ["Documentation and reporting", "FileText"],
+    ["Long-term asset care through Alektra divisions", "Sparkles"]
+  ].map(([title, icon], index) => ({ title, icon, sortOrder: index })));
+
+  await upsertSection(page.id, {
+    sectionKey: "proposal-form",
+    sectionType: "request-form-intro",
+    title: "Request a Solar EPC Proposal",
+    subtitle: "Proposal Request",
+    body: "Tell us about your facility and energy requirement. Our engineering team will review your information and contact you with the next steps.",
+    sortOrder: 95
+  });
+
+  const faq = await upsertSection(page.id, {
+    sectionKey: "faq",
+    sectionType: "faq",
+    title: "Solar EPC Questions",
+    subtitle: "EPC FAQ",
+    body: "Clear answers for industrial and commercial clients evaluating solar EPC, hybrid energy systems, net metering, monitoring, and after-sales support.",
+    sortOrder: 98
+  });
+  await replaceItems(faq.id, [
+    ["What type of solar projects does Alektra Renewable handle?", "Alektra Renewable focuses on commercial, industrial, institutional, rooftop, and selected larger solar energy projects where structured engineering and long-term support are important."],
+    ["Do you work with industrial and commercial rooftop solar systems?", "Yes. Industrial and commercial rooftop systems are a core part of our EPC work, including design, procurement, installation, commissioning, monitoring, and after-sales support."],
+    ["Can you design hybrid solar and energy storage systems?", "Yes. We can evaluate hybrid solar and energy storage readiness based on load profile, backup requirement, site condition, budget, and operating objective."],
+    ["Do you support net metering applications?", "We can support technical documentation and coordination for eligible net metering projects, subject to applicable rules, utility requirements, and site feasibility."],
+    ["What information is needed for a solar proposal?", "Useful information includes facility location, roof or land area, electricity bills or consumption data, transformer and load details, desired system type, and any site constraints."],
+    ["How do you protect the roof during installation?", "Our installation planning considers roof integrity, drainage, waterproofing, access, and suitable mounting practices. Where anchoring is required, proper waterproofing procedures are followed."],
+    ["Do you provide monitoring and after-sales support?", "Yes. We support monitoring, performance follow-up, issue coordination, and long-term asset care through EPC support and Alektra divisions such as Thermal, Sparkle, and Mapping."],
+    ["What brands of inverters and panels do you work with?", "Brand selection depends on project requirements, availability, warranty, technical compatibility, service support, and client preference. We prioritize reliable components suited to the project context."],
+    ["Do you provide thermal inspection and cleaning support?", "Eligible clients may receive support from Alektra Thermal for aerial thermal inspection and Alektra Sparkle for professional solar panel cleaning, subject to project scope and terms."],
+    ["How long does a typical EPC project take?", "Timeline depends on system size, site readiness, design approval, procurement, utility coordination, weather, and access conditions. Our team provides a project-specific schedule after review."]
+  ].map(([title, body], index) => ({ title, body, sortOrder: index })));
+
+  await upsertSection(page.id, {
+    sectionKey: "final-cta",
+    sectionType: "final-cta",
+    title: "Ready to Build a Smarter Solar Energy System?",
+    subtitle: "Start With Alektra",
+    body: "Tell us about your facility, load profile, roof condition, and energy goals. Our team will help you evaluate the right solar solution for your business.",
+    sortOrder: 100,
+    settingsJson: { primaryCtaText: "Request a Proposal", primaryCtaLink: "/#epc-proposal-form" }
   });
 }
 

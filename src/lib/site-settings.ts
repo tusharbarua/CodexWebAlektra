@@ -2,8 +2,9 @@ import { prisma } from "@/lib/prisma";
 
 export const defaultFooterSettings = {
   contactEmail: "contact@alektraepc.com",
-  contactPhone: "+880 1735954 844",
-  address: "Dhaka, Bangladesh",
+  contactPhone: "+880 1735 954 844",
+  secondaryPhone: "+880 1877 572 234",
+  address: "Chattogram | Dhaka | Bangladesh",
   facebookUrl: "",
   linkedinUrl: "",
   youtubeUrl: "",
@@ -22,6 +23,7 @@ export async function getFooterSettings(): Promise<FooterSettings> {
     return {
       contactEmail: settings.contactEmail || defaultFooterSettings.contactEmail,
       contactPhone: settings.contactPhone || defaultFooterSettings.contactPhone,
+      secondaryPhone: settings.secondaryPhone || defaultFooterSettings.secondaryPhone,
       address: settings.address || defaultFooterSettings.address,
       facebookUrl: settings.facebookUrl || "",
       linkedinUrl: settings.linkedinUrl || "",

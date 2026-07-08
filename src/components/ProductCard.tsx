@@ -1,6 +1,5 @@
-/* eslint-disable @next/next/no-img-element */
-
 import Link from "next/link";
+import Image from "next/image";
 import { Eye, Sparkles } from "lucide-react";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { money } from "@/lib/format";
@@ -19,7 +18,6 @@ type ProductCardProps = {
     price: number;
     stock: number;
     image: string;
-    description: string;
   };
 };
 
@@ -34,35 +32,43 @@ export function ProductCard({ product }: ProductCardProps) {
     stock: product.stock
   };
   const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
+  const savePercent = hasDiscount ? Math.round(((product.compareAtPrice! - product.price) / product.compareAtPrice!) * 100) : 0;
   return (
     <article className="shop-product-card">
       <Link className="shop-product-image" href={`/shop/${product.slug}`} aria-label={product.name}>
-        <div>
-          <img src={product.image} alt={product.name} />
+        <div className="shop-product-image-wrap">
+          <Image
+            src={product.image}
+            alt={product.name}
+            fill
+            sizes="(min-width: 1536px) 18vw, (min-width: 1024px) 23vw, (min-width: 640px) 32vw, 48vw"
+            unoptimized={product.image.endsWith(".svg")}
+          />
+          {hasDiscount && savePercent > 0 ? <span className="shop-discount-badge">Save {savePercent}%</span> : null}
         </div>
       </Link>
       <div className="shop-product-content">
-        <div className="shop-card-badges">
-          <span>{product.category}</span>
+        <div className="shop-product-meta">
+          <span className="shop-category-badge">{product.category}</span>
           {product.featured ? <span className="featured-badge"><Sparkles size={11} />Featured</span> : null}
-          {hasDiscount ? <span className="discount-badge">Discount</span> : null}
         </div>
-        <Link href={`/shop/${product.slug}`}><h3>{product.name}</h3></Link>
+        <Link className="shop-product-title" href={`/shop/${product.slug}`}><h3>{product.name}</h3></Link>
         <p className="shop-model-line">{product.model || product.sku} {product.brand ? `| ${product.brand}` : ""}</p>
-        <p className="shop-spec-line">{product.description}</p>
         <div className="shop-price-row">
-          <div>
-            <strong>{money(product.price)}</strong>
-            {hasDiscount ? <small>{money(product.compareAtPrice!)}</small> : null}
+          <div className="shop-price-stack">
+            <strong className="shop-current-price">{money(product.price)}</strong>
+            {hasDiscount ? <small className="shop-old-price">{money(product.compareAtPrice!)}</small> : null}
           </div>
-          <span className={product.stock > 0 ? "stock-badge in-stock" : "stock-badge out-stock"}>{product.stock > 0 ? "In Stock" : "Out of Stock"}</span>
         </div>
-        <div className="shop-card-actions">
-          <AddToCartButton product={cartProduct} compact disabled={product.stock <= 0} />
-          <Link className="quick-view-link" href={`/shop/${product.slug}`} aria-label={`View ${product.name}`}>
-            <Eye size={17} />
-          </Link>
+        <div className="shop-stock-row">
+          <span className={product.stock > 0 ? "stock-badge shop-stock-badge in-stock" : "stock-badge shop-stock-badge out-stock"}>{product.stock > 0 ? "In Stock" : "Out of Stock"}</span>
         </div>
+      </div>
+      <div className="shop-card-actions shop-product-actions">
+        <AddToCartButton product={cartProduct} compact disabled={product.stock <= 0} />
+        <Link className="quick-view-link shop-eye-button" href={`/shop/${product.slug}`} aria-label={`View ${product.name}`}>
+          <Eye size={17} />
+        </Link>
       </div>
     </article>
   );

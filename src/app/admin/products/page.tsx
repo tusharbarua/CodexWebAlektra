@@ -31,6 +31,13 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
       <section className="admin-card admin-form-section">
         <div className="admin-section-heading"><h2>Pricing & Stock</h2><p>Inventory and buying status.</p></div>
         <Field label="Price in BDT" name="priceBdt" type="number" value={current ? Number(current.priceBdt) : undefined} required />
+        <Field
+          label="Old Price / Regular Price"
+          name="compareAtPriceBdt"
+          type="number"
+          value={current?.compareAtPriceBdt ? Number(current.compareAtPriceBdt) : undefined}
+          help="Optional. This will appear as a struck-through old price beside the current selling price on the shop."
+        />
         <Field label="Stock quantity" name="stockQuantity" type="number" value={current?.stockQuantity} required />
         <label className="field"><span>Stock status</span><select name="stockStatus" defaultValue={currentStockStatus}>
           <option>In Stock</option>
@@ -64,14 +71,14 @@ export default async function AdminProductsPage({ searchParams }: { searchParams
 
       <div className="admin-form-actions sticky-actions"><button className="btn" type="submit">{current ? "Save Product" : "Save Product"}</button><a className="btn secondary" href="/admin/products">Cancel</a></div>
     </form>
-    <div className="admin-table-wrap"><table className="table"><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-      {products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.sku}</td><td>{product.category.name}</td><td>{money(Number(product.priceBdt))}</td><td>{product.stockQuantity}</td><td>{product.status}</td><td className="table-actions"><a className="btn secondary compact" href={`/admin/products?edit=${product.id}`}>Edit</a><form action={deleteProduct}><input type="hidden" name="id" value={product.id} /><button className="btn danger compact">Delete</button></form></td></tr>)}
+    <div className="admin-table-wrap"><table className="table"><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Price</th><th>Old Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      {products.map((product) => <tr key={product.id}><td>{product.name}</td><td>{product.sku}</td><td>{product.category.name}</td><td>{money(Number(product.priceBdt))}</td><td>{product.compareAtPriceBdt ? money(Number(product.compareAtPriceBdt)) : "-"}</td><td>{product.stockQuantity}</td><td>{product.status}</td><td className="table-actions"><a className="btn secondary compact" href={`/admin/products?edit=${product.id}`}>Edit</a><form action={deleteProduct}><input type="hidden" name="id" value={product.id} /><button className="btn danger compact">Delete</button></form></td></tr>)}
     </tbody></table></div>
   </div>;
 }
 
-function Field({ label, name, value, type = "text", required = false }: { label: string; name: string; value?: string | number | null; type?: string; required?: boolean }) {
-  return <label className="field"><span>{label}{required ? <b> *</b> : null}</span><input name={name} type={type} defaultValue={value ?? ""} required={required} /></label>;
+function Field({ label, name, value, type = "text", required = false, help }: { label: string; name: string; value?: string | number | null; type?: string; required?: boolean; help?: string }) {
+  return <label className="field"><span>{label}{required ? <b> *</b> : null}</span><input name={name} type={type} defaultValue={value ?? ""} required={required} />{help ? <small>{help}</small> : null}</label>;
 }
 function TextArea({ label, name, value, required = false }: { label: string; name: string; value?: string | null; required?: boolean }) {
   return <label className="field wide"><span>{label}{required ? <b> *</b> : null}</span><textarea name={name} rows={4} defaultValue={value ?? ""} required={required} /></label>;

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { EMAIL_VALIDATION_MESSAGE, MOBILE_VALIDATION_MESSAGE, OTP_REQUIRED_MESSAGE, normalizeBangladeshMobile } from "@/lib/checkout-validation";
 import { initiateSslCommerz, sslCommerzEnabled } from "@/lib/sslcommerz";
 import { sendOrderNotifications } from "@/lib/notifications";
+import { getCustomerSession, createEmailVerificationToken, createRawToken, hashCustomerPassword } from "@/lib/customer-auth";
+import { sendCustomerAccountSetupEmail } from "@/lib/mail";
 
 const optionalEmailSchema = z.preprocess(
   (value) => typeof value === "string" && !value.trim() ? undefined : value,
@@ -40,6 +42,8 @@ const checkoutSchema = z.object({
   paymentMethod: z.nativeEnum(PaymentMethod),
   couponCode: z.string().trim().optional(),
   termsAccepted: z.boolean().optional(),
+  saveAddress: z.boolean().optional(),
+  createAccount: z.boolean().optional(),
   termsVersion: z.string().trim().optional(),
   refundPolicyVersion: z.string().trim().optional(),
   items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() })).min(1)
@@ -57,6 +61,10 @@ export async function POST(request: Request) {
     const normalizedMobile = normalizeBangladeshMobile(parsed.customerPhone);
     if (!normalizedMobile) throw new CheckoutValidationError({ customerPhone: MOBILE_VALIDATION_MESSAGE });
     const body = { ...parsed, customerPhone: normalizedMobile };
+    const customer = await getCustomerSession();
+    if (!customer && body.createAccount && !body.customerEmail) {
+      throw new CheckoutValidationError({ customerEmail: "Email address is required to create an account." });
+    }
     if (body.paymentMethod === PaymentMethod.SSLCOMMERZ && !sslCommerzEnabled()) {
       throw new Error("SSLCommerz credentials are not configured. Please choose cash on delivery.");
     }
@@ -108,10 +116,48 @@ export async function POST(request: Request) {
     const orderNumber = await nextOrderNumber();
     const orderAddress = normalizeOrderAddress(body.address, body.deliveryMethod);
 
-    const order = await prisma.$transaction(async (tx) => {
+    const orderResult = await prisma.$transaction(async (tx) => {
+      let checkoutCustomerId = customer?.id ?? null;
+      let setupCustomer: { id: string; email: string; fullName: string } | null = null;
+      let existingVerifiedAccount = false;
+
+      if (!customer && body.createAccount && body.customerEmail) {
+        const email = body.customerEmail.toLowerCase();
+        const existingCustomer = await tx.customer.findUnique({ where: { email } });
+        if (existingCustomer?.emailVerified) {
+          existingVerifiedAccount = true;
+        } else if (existingCustomer) {
+          const updated = await tx.customer.update({
+            where: { id: existingCustomer.id },
+            data: {
+              fullName: body.customerName,
+              mobileNumber: body.customerPhone,
+              isActive: true
+            },
+            select: { id: true, email: true, fullName: true }
+          });
+          checkoutCustomerId = updated.id;
+          setupCustomer = updated;
+        } else {
+          const createdCustomer = await tx.customer.create({
+            data: {
+              fullName: body.customerName,
+              email,
+              mobileNumber: body.customerPhone,
+              passwordHash: await hashCustomerPassword(createRawToken()),
+              emailVerified: false
+            },
+            select: { id: true, email: true, fullName: true }
+          });
+          checkoutCustomerId = createdCustomer.id;
+          setupCustomer = createdCustomer;
+        }
+      }
+
       const created = await tx.order.create({
         data: {
           orderNumber,
+          customerId: checkoutCustomerId,
           customerName: body.customerName,
           customerEmail: body.customerEmail || null,
           customerPhone: body.customerPhone,
@@ -160,12 +206,54 @@ export async function POST(request: Request) {
         await tx.product.update({ where: { id: product.id }, data: { stockQuantity: { decrement: item.quantity } } });
       }
       if (coupon) await tx.coupon.update({ where: { id: coupon.id }, data: { usedCount: { increment: 1 } } });
-      return created;
+      const shouldSaveAddress = (customer?.id && body.saveAddress) || (!customer && body.createAccount && checkoutCustomerId && !existingVerifiedAccount);
+      if (shouldSaveAddress && checkoutCustomerId && body.deliveryMethod === "COURIER") {
+        const address = orderAddress as Record<string, string | boolean | undefined>;
+        if (address.addressLine && address.divisionName && address.districtName && address.upazilaName) {
+          const hasDefaultAddress = await tx.customerAddress.findFirst({
+            where: { customerId: checkoutCustomerId, isDefault: true },
+            select: { id: true }
+          });
+          await tx.customerAddress.create({
+            data: {
+              customerId: checkoutCustomerId,
+              recipientName: body.customerName,
+              mobileNumber: body.customerPhone,
+              divisionId: typeof address.divisionId === "string" ? address.divisionId : null,
+              divisionName: String(address.divisionName),
+              districtId: typeof address.districtId === "string" ? address.districtId : null,
+              districtName: String(address.districtName),
+              upazilaId: typeof address.upazilaId === "string" ? address.upazilaId : null,
+              upazilaName: String(address.upazilaName),
+              addressLine: String(address.addressLine),
+              postalCode: typeof address.postalCode === "string" ? address.postalCode : null,
+              deliveryNotes: typeof address.deliveryNotes === "string" ? address.deliveryNotes : null,
+              isDefault: !hasDefaultAddress
+            }
+          });
+        }
+      }
+      return { order: created, setupCustomer, existingVerifiedAccount };
     });
+    const order = orderResult.order;
 
     await sendOrderNotifications(order);
+    if (orderResult.setupCustomer) {
+      const setupToken = await createEmailVerificationToken(orderResult.setupCustomer.id);
+      await sendCustomerAccountSetupEmail({
+        email: orderResult.setupCustomer.email,
+        fullName: orderResult.setupCustomer.fullName,
+        token: setupToken,
+        orderNumber: order.orderNumber
+      }).catch(() => null);
+    }
     if (body.paymentMethod === PaymentMethod.CASH_ON_DELIVERY) {
-      return NextResponse.json({ ok: true, orderNumber: order.orderNumber, payment: "cod" });
+      return NextResponse.json({
+        ok: true,
+        orderNumber: order.orderNumber,
+        payment: "cod",
+        accountSetup: orderResult.setupCustomer ? "sent" : orderResult.existingVerifiedAccount ? "existing_account" : "none"
+      });
     }
 
     const payment = await initiateSslCommerz(order);
@@ -179,7 +267,12 @@ export async function POST(request: Request) {
         requestPayload: payment.payload as Prisma.InputJsonObject
       }
     });
-    return NextResponse.json({ ok: true, orderNumber: order.orderNumber, redirectUrl: payment.redirectUrl });
+    return NextResponse.json({
+      ok: true,
+      orderNumber: order.orderNumber,
+      redirectUrl: payment.redirectUrl,
+      accountSetup: orderResult.setupCustomer ? "sent" : orderResult.existingVerifiedAccount ? "existing_account" : "none"
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({
