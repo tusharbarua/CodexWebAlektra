@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { CART_OPEN_EVENT, CART_UPDATED_EVENT, CartItem, cartSummary, readCart, writeCart } from "@/lib/cart";
@@ -9,6 +10,7 @@ import { money } from "@/lib/format";
 export function CartDrawer() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<CartItem[]>([]);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const summary = useMemo(() => cartSummary(items), [items]);
 
   useEffect(() => {
@@ -58,7 +60,15 @@ export function CartDrawer() {
         <div className="cart-drawer-body">
           {items.length ? items.map((item) => (
             <article className="cart-drawer-item" key={item.id}>
-              <img src={item.image} alt={item.name} />
+              <Image
+                src={failedImages[item.id] ? fallbackProductImage : item.image}
+                alt={item.name}
+                width={72}
+                height={72}
+                sizes="72px"
+                unoptimized={(failedImages[item.id] ? fallbackProductImage : item.image).endsWith(".svg")}
+                onError={() => setFailedImages((current) => ({ ...current, [item.id]: true }))}
+              />
               <div className="cart-drawer-item-main">
                 <Link href={`/shop/${item.slug}`} onClick={() => setOpen(false)}>{item.name}</Link>
                 <small>{item.sku}</small>
@@ -95,3 +105,5 @@ export function CartDrawer() {
     </>
   );
 }
+
+const fallbackProductImage = "/uploads/products/seed-solar-module.svg";

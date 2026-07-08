@@ -1498,28 +1498,6 @@ async function seedMappingPage() {
   ].map(([title, body], index) => ({ title, body, sortOrder: index })));
 }
 
-async function seedSimpleSubdivision(pageKey: PageKey, title: string, slug: string, metaTitle: string, metaDescription: string, body: string) {
-  const page = await upsertPage(pageKey, title, slug, metaTitle, metaDescription);
-  const hero = await upsertSection(page.id, {
-    sectionKey: "hero",
-    sectionType: "simple-hero",
-    title,
-    subtitle: metaTitle,
-    body,
-    sortOrder: 10,
-    settingsJson: { primaryCtaText: "Contact Alektra", primaryCtaLink: "/#contact" }
-  });
-  await replaceItems(hero.id, []);
-  await upsertSection(page.id, {
-    sectionKey: "overview",
-    sectionType: "simple-content",
-    title: "Overview",
-    subtitle: "Editable subdivision content",
-    body,
-    sortOrder: 20
-  });
-}
-
 main()
   .catch((error) => {
     console.error(error);

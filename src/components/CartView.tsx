@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { CartItem, cartSummary, readCart, writeCart } from "@/lib/cart";
@@ -8,6 +9,7 @@ import { money } from "@/lib/format";
 
 export function CartView() {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const summary = useMemo(() => cartSummary(items), [items]);
 
   useEffect(() => {
@@ -39,7 +41,15 @@ export function CartView() {
       <section className="panel cart-items-panel">
         {items.map((item) => (
           <article className="cart-line-item" key={item.id}>
-            <img src={item.image} alt={item.name} />
+            <Image
+              src={failedImages[item.id] ? fallbackProductImage : item.image}
+              alt={item.name}
+              width={86}
+              height={86}
+              sizes="86px"
+              unoptimized={(failedImages[item.id] ? fallbackProductImage : item.image).endsWith(".svg")}
+              onError={() => setFailedImages((current) => ({ ...current, [item.id]: true }))}
+            />
             <div>
               <Link href={`/shop/${item.slug}`}><h3>{item.name}</h3></Link>
               <p>{item.sku}</p>
@@ -67,3 +77,5 @@ export function CartView() {
     </div>
   );
 }
+
+const fallbackProductImage = "/uploads/products/seed-solar-module.svg";

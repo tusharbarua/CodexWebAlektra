@@ -192,5 +192,10 @@ function verifySignedPayload(token: string): CustomerSessionPayload | null {
 }
 
 function customerSecret() {
-  return process.env.CUSTOMER_SESSION_SECRET ?? process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "alektra-development-customer-session-secret";
+  const secret = process.env.CUSTOMER_SESSION_SECRET ?? process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("CUSTOMER_SESSION_SECRET or AUTH_SECRET must be configured in production.");
+  }
+  return "alektra-development-customer-session-secret";
 }

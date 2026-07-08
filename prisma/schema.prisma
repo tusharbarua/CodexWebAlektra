@@ -476,6 +476,9 @@ model ResourceArticle {
   author          User?            @relation("ArticleAuthor", fields: [authorId], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+
+  @@index([categoryId, status])
+  @@index([status, isFeatured, publishedAt])
 }
 
 model ProductCategory {
@@ -520,6 +523,10 @@ model Product {
   orderItems           OrderItem[]
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
+
+  @@index([categoryId, status])
+  @@index([status, isFeatured])
+  @@index([createdAt])
 }
 
 model ProductImage {
@@ -532,6 +539,8 @@ model ProductImage {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([productId, isPrimary, sortOrder])
 }
 
 model Coupon {
@@ -732,6 +741,10 @@ model Order {
   updatedAt              DateTime             @updatedAt
 
   @@index([customerId])
+  @@index([customerEmail])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
 }
 
 model OrderStatusHistory {
@@ -760,6 +773,9 @@ model OrderItem {
   lineTotalBdt Decimal
   order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product      Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model PaymentTransaction {

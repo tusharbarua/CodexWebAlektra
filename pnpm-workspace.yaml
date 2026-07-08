@@ -5,3 +5,8 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+peerDependencyRules:
+  allowedVersions:
+    nodemailer: "9"
+overrides:
+  postcss: "^8.5.10"

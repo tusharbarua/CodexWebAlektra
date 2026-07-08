@@ -369,6 +369,8 @@ function createTransport() {
     port: Number(process.env.SMTP_PORT ?? 587),
     secure: smtpSecure(),
     requireTLS: process.env.SMTP_REQUIRE_TLS === "true",
+    disableFileAccess: true,
+    disableUrlAccess: true,
     auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: smtpPassword() } : undefined
   });
 }

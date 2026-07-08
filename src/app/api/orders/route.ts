@@ -90,7 +90,15 @@ export async function POST(request: Request) {
 
     const productIdentifiers = body.items.map((item) => item.productId);
     const products = await prisma.product.findMany({
-      where: { OR: [{ id: { in: productIdentifiers } }, { slug: { in: productIdentifiers } }, { sku: { in: productIdentifiers } }] }
+      where: { OR: [{ id: { in: productIdentifiers } }, { slug: { in: productIdentifiers } }, { sku: { in: productIdentifiers } }] },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sku: true,
+        priceBdt: true,
+        stockQuantity: true
+      }
     });
 
     const subtotal = body.items.reduce((sum, item) => {
