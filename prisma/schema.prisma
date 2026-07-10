@@ -370,6 +370,8 @@ model Project {
   coverImage         String?
   summary            String
   fullCaseStudy      String         @default("")
+  isFeatured         Boolean        @default(false)
+  featureOnResources Boolean        @default(false)
   inverterBrandModel String?
   moduleBrandModel   String?
   imageUrls          Json?
@@ -380,6 +382,9 @@ model Project {
   status             PublishStatus  @default(PUBLISHED)
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+
+  @@index([status, isFeatured])
+  @@index([status, isFeatured, commissionedAt, createdAt])
 }
 
 model ProjectImage {
@@ -472,6 +477,8 @@ model ResourceArticle {
   publishedAt     DateTime?
   seoTitle        String?
   seoDescription  String?
+  sourceType      String?
+  sourceProjectId String?          @unique
   category        ResourceCategory @relation(fields: [categoryId], references: [id])
   author          User?            @relation("ArticleAuthor", fields: [authorId], references: [id])
   createdAt       DateTime         @default(now())
@@ -479,6 +486,7 @@ model ResourceArticle {
 
   @@index([categoryId, status])
   @@index([status, isFeatured, publishedAt])
+  @@index([sourceType])
 }
 
 model ProductCategory {

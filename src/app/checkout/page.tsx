@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { CheckoutForm } from "@/components/CheckoutForm";
 import { defaultRefundContent, defaultTermsContent } from "@/lib/shop-legal";
@@ -17,8 +18,13 @@ export default async function CheckoutPage() {
   return (
     <main className="page-shell checkout-page">
       <div className="container">
-        <p className="kicker">Checkout</p>
-        <h1>Confirm delivery and payment.</h1>
+        <div className="checkout-page-heading">
+          <div>
+            <p className="kicker">Checkout</p>
+            <h1>Confirm delivery and payment.</h1>
+          </div>
+          <Link className="checkout-continue-shopping" href="/shop">← Continue Shopping</Link>
+        </div>
         <CheckoutForm deliverySettings={{
           courierEnabled: settings?.courierEnabled ?? true,
           courierMinimumChargeBdt: settings ? Number(settings.courierMinimumChargeBdt) : 200,

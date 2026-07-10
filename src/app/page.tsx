@@ -28,14 +28,12 @@ import { HeroMediaBackground } from "@/components/HeroMediaBackground";
 import { ImpactDashboard } from "@/components/ImpactDashboard";
 import { EpcProposalButton } from "@/components/EpcProposalButton";
 import { EpcProposalForm } from "@/components/EpcProposalForm";
+import EpcProjectShowcase from "@/components/EpcProjectShowcase";
 import { getPrimaryHeroMedia } from "@/lib/hero-media";
 import { MarkdownBlock, getPublishedPage, sectionByKey, settings } from "@/lib/page-cms";
-import { numberFormat } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-const fallbackSolar = "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1400&q=80";
 
 const iconMap = {
   Award,
@@ -73,9 +71,28 @@ export default async function HomePage() {
     prisma.impactSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
     prisma.project.findMany({
       where: { status: PublishStatus.PUBLISHED },
-      include: { images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] } },
-      orderBy: [{ commissionedAt: "desc" }, { createdAt: "desc" }],
-      take: 7
+      select: {
+        id: true,
+        title: true,
+        clientName: true,
+        location: true,
+        projectType: true,
+        capacityKw: true,
+        commissionedAt: true,
+        coverImage: true,
+        summary: true,
+        inverterBrandModel: true,
+        moduleBrandModel: true,
+        slug: true,
+        isFeatured: true,
+        images: {
+          select: { imagePath: true, altText: true },
+          orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+          take: 1
+        }
+      },
+      orderBy: [{ isFeatured: "desc" }, { commissionedAt: "desc" }, { createdAt: "desc" }],
+      take: 24
     }),
     getPublishedPage(PageKey.epc),
     getPrimaryHeroMedia(PageKey.epc)
@@ -114,6 +131,11 @@ export default async function HomePage() {
     co2OffsetTons: Number(impactRow?.co2OffsetTons ?? 0),
     longHaulFlightsAvoided: Number(impactRow?.longHaulFlightsAvoided ?? 0)
   };
+  const projectCards = projects.map((project) => ({
+    ...project,
+    capacityKw: Number(project.capacityKw),
+    commissionedAt: project.commissionedAt?.toISOString() ?? null
+  }));
 
   return (
     <main className="epc-landing-page">
@@ -179,7 +201,7 @@ export default async function HomePage() {
           <EpcHeading section={projectsSection} fallbackKicker="Featured Delivery" fallbackTitle="Our Projects">
             A premium project showcase connected to the existing project CMS. Published projects appear here automatically.
           </EpcHeading>
-          {projects.length ? <ProjectShowcase projects={projects} /> : <EmptyProjects />}
+          {projectCards.length ? <EpcProjectShowcase projects={projectCards} /> : <EmptyProjects />}
         </div>
       </section>
 
@@ -342,54 +364,6 @@ type CmsLikeItem = {
 
 function itemsOrFallback(section: ReturnType<typeof sectionByKey>, fallback: CmsLikeItem[]) {
   return section?.items.length ? section.items : fallback;
-}
-
-function ProjectShowcase({ projects }: { projects: Array<{
-  id: string;
-  title: string;
-  clientName: string | null;
-  location: string;
-  projectType: string;
-  capacityKw: unknown;
-  commissionedAt: Date | null;
-  coverImage: string | null;
-  summary: string;
-  inverterBrandModel: string | null;
-  moduleBrandModel: string | null;
-  slug: string;
-  images: Array<{ imagePath: string; altText: string }>;
-}> }) {
-  const [featured, ...rest] = projects;
-  const featuredImage = featured.images[0]?.imagePath ?? featured.coverImage ?? fallbackSolar;
-  return (
-    <div className="epc-project-showcase">
-      <article className="epc-featured-project epc-crystal-card">
-        <div className="epc-project-image" style={{ backgroundImage: `url(${featuredImage})` }} />
-        <div>
-          <span>{numberFormat(Number(featured.capacityKw))} kW · {featured.projectType}</span>
-          <h3>{featured.title}</h3>
-          <p>{featured.summary}</p>
-          <dl>
-            <div><dt>Client</dt><dd>{featured.clientName ?? "Commercial client"}</dd></div>
-            <div><dt>Location</dt><dd>{featured.location}</dd></div>
-            <div><dt>Equipment</dt><dd>{[featured.moduleBrandModel, featured.inverterBrandModel].filter(Boolean).join(" · ") || "Selected by project scope"}</dd></div>
-          </dl>
-        </div>
-      </article>
-      <div className="epc-project-rail">
-        {rest.map((project) => (
-          <article className="epc-project-mini epc-crystal-card" key={project.id}>
-            <div className="epc-mini-image" style={{ backgroundImage: `url(${project.images[0]?.imagePath ?? project.coverImage ?? fallbackSolar})` }} />
-            <div>
-              <span>{project.location}</span>
-              <h3>{project.title}</h3>
-              <p>{numberFormat(Number(project.capacityKw))} kW · {project.projectType}</p>
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function EmptyProjects() {

@@ -1,6 +1,6 @@
 "use server";
 
-import { IntegrationProvider, OrderStatus, PageKey, PaymentStatus, PublishStatus, Role } from "@prisma/client";
+import { IntegrationProvider, OrderStatus, PageKey, PaymentStatus, Prisma, PublishStatus, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -58,12 +58,61 @@ function productError(message: string, productId?: string): never {
   redirect(target);
 }
 
+function projectError(message: string, projectId?: string): never {
+  const target = `/admin/projects?error=${encodeURIComponent(message)}${projectId ? `&edit=${projectId}` : ""}`;
+  redirect(target);
+}
+
 function slugifyProduct(value: string) {
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || `product-${Date.now()}`;
+}
+
+function slugifyProject(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || `project-${Date.now()}`;
+}
+
+function articleExcerpt(value: string) {
+  const plain = value
+    .replace(/[#*_`>~\-[\]()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain.length > 220 ? `${plain.slice(0, 217).trim()}...` : plain;
+}
+
+async function uniqueResourceSlug(baseValue: string, existingArticleId?: string) {
+  const base = slugifyProject(baseValue);
+  let slug = base;
+  let suffix = 2;
+  while (true) {
+    const existing = await prisma.resourceArticle.findUnique({ where: { slug }, select: { id: true } });
+    if (!existing || existing.id === existingArticleId) return slug;
+    slug = `${base}-${suffix}`;
+    suffix += 1;
+  }
+}
+
+async function getProjectCaseStudyCategoryId() {
+  const existing = await prisma.resourceCategory.findUnique({ where: { slug: "project-case-study" } });
+  if (existing) return existing.id;
+  const created = await prisma.resourceCategory.create({
+    data: {
+      name: "Project Case Study",
+      slug: "project-case-study",
+      description: "Completed Alektra Renewable project case studies and delivery insights.",
+      icon: "FileText",
+      sortOrder: 90,
+      status: PublishStatus.PUBLISHED
+    }
+  });
+  return created.id;
 }
 
 function firstProductValidationMessage(error: z.ZodError) {
@@ -411,8 +460,11 @@ export async function deleteResource(formData: FormData) {
 }
 
 export async function saveProject(formData: FormData) {
-  await requireAdmin();
-  const data = z.object({
+  const user = await requireAdmin();
+  const projectId = optional(formData.get("id")) ?? undefined;
+  const projectTitle = text(formData.get("title"));
+  const normalizedSlug = slugifyProject(text(formData.get("slug")) || projectTitle);
+  const parsed = z.object({
     id: z.string().optional(),
     title: z.string().min(3),
     slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
@@ -423,15 +475,17 @@ export async function saveProject(formData: FormData) {
     commissionedAt: z.string().optional(),
     coverImage: z.string().optional(),
     summary: z.string().min(10),
-    fullCaseStudy: z.string().min(20),
+    fullCaseStudy: z.string(),
     inverterBrandModel: z.string().optional(),
     moduleBrandModel: z.string().optional(),
     videoUrl: z.string().optional(),
+    isFeatured: z.boolean().default(false),
+    featureOnResources: z.boolean().default(false),
     status: z.nativeEnum(PublishStatus)
-  }).parse({
-    id: optional(formData.get("id")) ?? undefined,
-    title: text(formData.get("title")),
-    slug: text(formData.get("slug")),
+  }).safeParse({
+    id: projectId,
+    title: projectTitle,
+    slug: normalizedSlug,
     clientName: text(formData.get("clientName")),
     location: text(formData.get("location")),
     projectType: text(formData.get("projectType")),
@@ -443,8 +497,26 @@ export async function saveProject(formData: FormData) {
     inverterBrandModel: text(formData.get("inverterBrandModel")),
     moduleBrandModel: text(formData.get("moduleBrandModel")),
     videoUrl: text(formData.get("videoUrl")),
+    isFeatured: formData.get("isFeatured") === "on",
+    featureOnResources: formData.get("featureOnResources") === "on",
     status: status(formData.get("status"))
   });
+  if (!parsed.success) {
+    const errors = parsed.error.flatten().fieldErrors;
+    const message =
+      errors.title?.[0] ? "Project name must be at least 3 characters." :
+      errors.slug?.[0] ? "Project slug can only contain lowercase letters, numbers, and hyphens." :
+      errors.location?.[0] ? "Project location is required." :
+      errors.projectType?.[0] ? "Project type is required." :
+      errors.capacityKw?.[0] ? "Capacity must be a valid number greater than or equal to 0." :
+      errors.summary?.[0] ? "Short description must be at least 10 characters." :
+      "Please check the project form and try again.";
+    projectError(message, projectId);
+  }
+  const data = parsed.data;
+  if (data.featureOnResources && data.fullCaseStudy.trim().length < 20) {
+    projectError("Case Study is required to feature this project on Resources.", data.id);
+  }
   const existingImages = data.id
     ? await prisma.projectImage.findMany({ where: { projectId: data.id }, orderBy: { sortOrder: "asc" } })
     : [];
@@ -467,9 +539,18 @@ export async function saveProject(formData: FormData) {
     videoUrl: data.videoUrl || null,
     imageUrls: lines(formData.get("imageUrls"))
   };
-  const project = data.id
-    ? await prisma.project.update({ where: { id: data.id }, data: projectData })
-    : await prisma.project.create({ data: projectData });
+  let project = await (async () => {
+    try {
+      return data.id
+      ? await prisma.project.update({ where: { id: data.id }, data: projectData })
+      : await prisma.project.create({ data: projectData });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        projectError("A project with this slug already exists. Please choose a different slug.", data.id);
+      }
+      throw error;
+    }
+  })();
 
   const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
   if (imagesToDelete.length) {
@@ -512,19 +593,104 @@ export async function saveProject(formData: FormData) {
   const primary = finalImages.find((image) => image.isPrimary) ?? finalImages[0];
   if (primary) {
     if (!primary.isPrimary) await prisma.projectImage.update({ where: { id: primary.id }, data: { isPrimary: true } });
-    await prisma.project.update({ where: { id: project.id }, data: { coverImage: primary.imagePath } });
+    project = await prisma.project.update({ where: { id: project.id }, data: { coverImage: primary.imagePath } });
   }
-  refresh("/", "/admin/projects");
+  if (data.isFeatured) {
+    await prisma.project.updateMany({
+      where: { id: { not: project.id }, isFeatured: true },
+      data: { isFeatured: false }
+    });
+  }
+  await syncProjectCaseStudyArticle({
+    projectId: project.id,
+    title: project.title,
+    status: project.status,
+    fullCaseStudy: project.fullCaseStudy,
+    coverImage: project.coverImage,
+    featureOnResources: project.featureOnResources,
+    authorId: user.id
+  });
+  refresh("/", "/resources", "/admin/projects", "/admin/resources");
   redirect("/admin/projects");
+}
+
+async function syncProjectCaseStudyArticle({
+  projectId,
+  title,
+  status,
+  fullCaseStudy,
+  coverImage,
+  featureOnResources,
+  authorId
+}: {
+  projectId: string;
+  title: string;
+  status: PublishStatus;
+  fullCaseStudy: string;
+  coverImage: string | null;
+  featureOnResources: boolean;
+  authorId: string;
+}) {
+  const existing = await prisma.resourceArticle.findUnique({ where: { sourceProjectId: projectId } });
+
+  if (!featureOnResources) {
+    if (existing) {
+      await prisma.resourceArticle.update({
+        where: { id: existing.id },
+        data: { status: PublishStatus.UNPUBLISHED, publishedAt: null }
+      });
+      refresh(`/resources/${existing.slug}`);
+    }
+    return;
+  }
+
+  const categoryId = await getProjectCaseStudyCategoryId();
+  const author = await prisma.user.findUnique({ where: { id: authorId }, select: { id: true } });
+  const articleStatus = status === PublishStatus.PUBLISHED ? PublishStatus.PUBLISHED : PublishStatus.DRAFT;
+  const slug = await uniqueResourceSlug(title, existing?.id);
+  const excerpt = articleExcerpt(fullCaseStudy);
+  const payload = {
+    title,
+    slug,
+    excerpt,
+    body: fullCaseStudy,
+    coverImage,
+    coverImageAlt: title,
+    categoryId,
+    sourceType: "project_case_study",
+    sourceProjectId: projectId,
+    isFeatured: false,
+    readTimeMinutes: estimateReadTime(fullCaseStudy),
+    seoTitle: title,
+    seoDescription: excerpt,
+    status: articleStatus,
+    publishedAt: articleStatus === PublishStatus.PUBLISHED ? existing?.publishedAt ?? new Date() : null,
+    authorId: author?.id ?? null
+  };
+
+  const article = existing
+    ? await prisma.resourceArticle.update({ where: { id: existing.id }, data: payload })
+    : await prisma.resourceArticle.create({ data: payload });
+  refresh(`/resources/${article.slug}`);
 }
 
 export async function deleteProject(formData: FormData) {
   await requireAdmin();
   const id = z.string().parse(formData.get("id"));
-  const images = await prisma.projectImage.findMany({ where: { projectId: id } });
+  const [images, linkedArticle] = await Promise.all([
+    prisma.projectImage.findMany({ where: { projectId: id } }),
+    prisma.resourceArticle.findUnique({ where: { sourceProjectId: id }, select: { id: true, slug: true } })
+  ]);
   await prisma.project.delete({ where: { id } });
+  if (linkedArticle) {
+    await prisma.resourceArticle.update({
+      where: { id: linkedArticle.id },
+      data: { status: PublishStatus.UNPUBLISHED, publishedAt: null, sourceProjectId: null }
+    });
+    refresh(`/resources/${linkedArticle.slug}`);
+  }
   await Promise.all(images.map((image) => deletePublicUpload(image.imagePath)));
-  refresh("/", "/admin/projects");
+  refresh("/", "/resources", "/admin/projects", "/admin/resources");
 }
 
 export async function saveSiteContent(formData: FormData) {

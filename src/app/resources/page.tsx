@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 const resourceFallbackImage =
   "linear-gradient(135deg, rgba(0,111,53,0.92), rgba(82,183,72,0.72) 48%, rgba(255,183,0,0.74))";
 
-export default async function ResourcesPage({ searchParams }: { searchParams: Promise<{ category?: string; q?: string }> }) {
-  const { category: activeCategory = "all", q = "" } = await searchParams;
+export default async function ResourcesPage({ searchParams }: { searchParams: Promise<{ category?: string; q?: string; take?: string }> }) {
+  const { category: activeCategory = "all", q = "", take } = await searchParams;
   const query = q.trim();
+  const requestedTake = Number(take);
+  const visibleCount = Number.isFinite(requestedTake) ? Math.min(60, Math.max(12, requestedTake)) : 12;
   const categories = await prisma.resourceCategory.findMany({
     where: { status: PublishStatus.PUBLISHED },
     include: { _count: { select: { articles: { where: { status: PublishStatus.PUBLISHED } } } } },
@@ -18,24 +20,42 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
   });
   const selectedCategory = categories.find((item) => item.slug === activeCategory);
 
-  const articles = await prisma.resourceArticle.findMany({
-    where: {
-      status: PublishStatus.PUBLISHED,
-      ...(selectedCategory ? { categoryId: selectedCategory.id } : {}),
-      ...(query
-        ? {
-            OR: [
-              { title: { contains: query } },
-              { excerpt: { contains: query } },
-              { body: { contains: query } },
-              { category: { name: { contains: query } } }
-            ]
-          }
-        : {})
-    },
-    include: { category: true, author: true },
-    orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }, { createdAt: "desc" }]
-  });
+  const articleWhere = {
+    status: PublishStatus.PUBLISHED,
+    ...(selectedCategory ? { categoryId: selectedCategory.id } : {}),
+    ...(query
+      ? {
+          OR: [
+            { title: { contains: query } },
+            { excerpt: { contains: query } },
+            { category: { name: { contains: query } } }
+          ]
+        }
+      : {})
+  };
+  const [articlesResult, totalArticles] = await Promise.all([
+    prisma.resourceArticle.findMany({
+      where: articleWhere,
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        excerpt: true,
+        coverImage: true,
+        coverImageAlt: true,
+        publishedAt: true,
+        createdAt: true,
+        readTimeMinutes: true,
+        isFeatured: true,
+        category: { select: { name: true, slug: true } }
+      },
+      orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }, { createdAt: "desc" }],
+      take: visibleCount + 1
+    }),
+    prisma.resourceArticle.count({ where: articleWhere })
+  ]);
+  const hasMore = articlesResult.length > visibleCount;
+  const articles = articlesResult.slice(0, visibleCount);
   const [featured, ...gridArticles] = articles;
 
   return (
@@ -91,7 +111,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
                 <p>{featured.excerpt}</p>
                 <div className="resources-meta">
                   <span>{formatDate(featured.publishedAt ?? featured.createdAt)}</span>
-                  <span><Clock3 size={14} /> {featured.readTimeMinutes ?? estimateReadTime(featured.body)} min read</span>
+                  <span><Clock3 size={14} /> {featured.readTimeMinutes ?? 1} min read</span>
                 </div>
                 <span className="resources-read-link">Read Article <ArrowRight size={16} /></span>
               </div>
@@ -107,12 +127,21 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
               <p className="resources-kicker">Knowledge Articles</p>
               <h2>{selectedCategory ? selectedCategory.name : query ? "Search Results" : "Latest Resources"}</h2>
             </div>
-            <p>{articles.length ? `${articles.length} published article${articles.length === 1 ? "" : "s"} available.` : "Resources are being prepared. Please check back soon."}</p>
+            <p>{articles.length ? `Showing ${articles.length} of ${totalArticles} published article${totalArticles === 1 ? "" : "s"}.` : "Resources are being prepared. Please check back soon."}</p>
           </div>
           {articles.length ? (
-            <div className="resources-card-grid">
-              {(featured ? gridArticles : articles).map((article) => <ResourceCard article={article} key={article.id} />)}
-            </div>
+            <>
+              <div className="resources-card-grid">
+                {(featured ? gridArticles : articles).map((article) => <ResourceCard article={article} key={article.id} />)}
+              </div>
+              {hasMore ? (
+                <div className="resources-load-more-wrap">
+                  <Link className="resources-load-more" href={resourcesHref({ category: activeCategory, q: query, take: visibleCount + 12 })}>
+                    Load More <ArrowRight size={16} />
+                  </Link>
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="resources-empty resources-glass-card">
               <Sparkles size={30} />
@@ -135,7 +164,17 @@ function ResourcePill({ href, active, label, count }: { href: string; active: bo
   );
 }
 
-type ArticleWithCategory = Awaited<ReturnType<typeof prisma.resourceArticle.findMany>>[number] & {
+type ArticleWithCategory = {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string;
+  coverImage: string | null;
+  coverImageAlt: string | null;
+  publishedAt: Date | null;
+  createdAt: Date;
+  readTimeMinutes: number | null;
+  isFeatured: boolean;
   category: { name: string; slug: string };
 };
 
@@ -149,7 +188,7 @@ function ResourceCard({ article }: { article: ArticleWithCategory }) {
         <p>{article.excerpt}</p>
         <div className="resources-meta">
           <span>{formatDate(article.publishedAt ?? article.createdAt)}</span>
-          <span><Clock3 size={14} /> {article.readTimeMinutes ?? estimateReadTime(article.body)} min read</span>
+          <span><Clock3 size={14} /> {article.readTimeMinutes ?? 1} min read</span>
         </div>
         <span className="resources-read-link">Read Article <ArrowRight size={15} /></span>
       </div>
@@ -166,6 +205,11 @@ function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-BD", { month: "short", day: "numeric", year: "numeric" }).format(value);
 }
 
-function estimateReadTime(body: string) {
-  return Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 180));
+function resourcesHref({ category, q, take }: { category: string; q: string; take: number }) {
+  const params = new URLSearchParams();
+  if (category && category !== "all") params.set("category", category);
+  if (q) params.set("q", q);
+  params.set("take", String(take));
+  const queryString = params.toString();
+  return queryString ? `/resources?${queryString}` : "/resources";
 }

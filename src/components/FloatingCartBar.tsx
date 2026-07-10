@@ -21,7 +21,7 @@ export function FloatingCartBar() {
     };
   }, []);
 
-  if (pathname.startsWith("/admin") || !items.length) return null;
+  if (pathname.startsWith("/admin") || pathname.startsWith("/checkout") || !items.length) return null;
   const summary = cartSummary(items);
 
   return (

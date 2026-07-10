@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: "alektra-renewable",
+      name: "alektra-website",
       script: "node_modules/next/dist/bin/next",
       args: "start -p 3000",
       cwd: __dirname,
