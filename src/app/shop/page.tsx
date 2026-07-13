@@ -22,9 +22,11 @@ type ShopParams = {
   stock?: string;
   featured?: string;
   view?: string;
+  page?: string;
 };
 
 const fallbackImage = "https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=1200&q=80";
+const PRODUCTS_PER_PAGE = 16;
 
 export default async function ShopPage({ searchParams }: { searchParams: Promise<ShopParams> }) {
   const params = await searchParams;
@@ -56,29 +58,8 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
       { brand: { contains: params.q } }
     ] : undefined
   };
-  const [products, brands] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        sku: true,
-        model: true,
-        brand: true,
-        isFeatured: true,
-        priceBdt: true,
-        compareAtPriceBdt: true,
-        stockQuantity: true,
-        category: { select: { name: true } },
-        images: {
-          select: { imagePath: true },
-          orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-          take: 1
-        }
-      },
-      orderBy: orderBy(params.sort)
-    }),
+  const [totalResults, brands] = await Promise.all([
+    prisma.product.count({ where }),
     prisma.product.findMany({
       where: { status: PublishStatus.PUBLISHED },
       distinct: ["brand"],
@@ -86,8 +67,37 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
       orderBy: { brand: "asc" }
     })
   ]);
+  const totalPages = totalResults ? Math.ceil(totalResults / PRODUCTS_PER_PAGE) : 0;
+  const requestedPage = Number(params.page ?? "1");
+  const currentPage = totalPages ? Math.min(Math.max(Number.isFinite(requestedPage) ? Math.trunc(requestedPage) : 1, 1), totalPages) : 0;
+  const startItem = totalResults ? (currentPage - 1) * PRODUCTS_PER_PAGE + 1 : 0;
+  const endItem = totalResults ? Math.min(currentPage * PRODUCTS_PER_PAGE, totalResults) : 0;
+  const products = totalResults ? await prisma.product.findMany({
+    where,
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      sku: true,
+      model: true,
+      brand: true,
+      isFeatured: true,
+      priceBdt: true,
+      compareAtPriceBdt: true,
+      stockQuantity: true,
+      category: { select: { name: true } },
+      images: {
+        select: { imagePath: true },
+        orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+        take: 1
+      }
+    },
+    orderBy: orderBy(params.sort),
+    skip: (currentPage - 1) * PRODUCTS_PER_PAGE,
+    take: PRODUCTS_PER_PAGE
+  }) : [];
   const rootCategories = categories.filter((category) => !category.parentId);
-  const productCount = products.length;
+  const productCount = totalResults;
 
   return (
     <main className="shop-page-shell">
@@ -151,7 +161,16 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
             </nav>
           </aside>
 
-          <section className="shop-main-area">
+          <section className="shop-main-area" id="shop-results">
+            <ShopPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              startItem={startItem}
+              endItem={endItem}
+              totalResults={totalResults}
+              params={params}
+              position="top"
+            />
             {products.length ? (
               <div className={params.view === "list" ? "shop-compact-list" : "shop-product-grid"}>
                 {products.map((product) => <ProductCard key={product.id} product={{
@@ -177,6 +196,15 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
                 <Link href="/shop">Clear filters</Link>
               </div>
             )}
+            <ShopPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              startItem={startItem}
+              endItem={endItem}
+              totalResults={totalResults}
+              params={params}
+              position="bottom"
+            />
           </section>
         </div>
         <div className="shop-legal-links">
@@ -186,6 +214,68 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         </div>
       </div>
     </main>
+  );
+}
+
+function ShopPagination({
+  currentPage,
+  totalPages,
+  startItem,
+  endItem,
+  totalResults,
+  params,
+  position
+}: {
+  currentPage: number;
+  totalPages: number;
+  startItem: number;
+  endItem: number;
+  totalResults: number;
+  params: ShopParams;
+  position: "top" | "bottom";
+}) {
+  const pageItems = paginationItems(currentPage, totalPages);
+  const hasResults = totalResults > 0;
+  const previousPage = currentPage > 1 ? currentPage - 1 : null;
+  const nextPage = currentPage < totalPages ? currentPage + 1 : null;
+
+  return (
+    <div className={`shop-pagination-shell shop-pagination-shell-${position}`}>
+      <div className="shop-pagination-meta">
+        {hasResults ? (
+          <>
+            <strong>Page {currentPage}</strong>
+            <span>Showing {startItem}-{endItem} of {totalResults} results</span>
+          </>
+        ) : (
+          <strong>No products found</strong>
+        )}
+      </div>
+      {totalPages > 1 ? (
+        <nav className="shop-pagination-controls" aria-label={`Shop pagination ${position}`}>
+          {previousPage ? (
+            <Link className="shop-page-step" href={shopPageHref(params, previousPage)}>Previous</Link>
+          ) : (
+            <span className="shop-page-step disabled" aria-disabled="true">Previous</span>
+          )}
+          <span className="shop-page-compact">Page {currentPage} of {totalPages}</span>
+          <div className="shop-page-number-list" aria-label="Page numbers">
+            {pageItems.map((item, index) => item === "ellipsis" ? (
+              <span className="shop-page-ellipsis" key={`ellipsis-${index}`}>...</span>
+            ) : item === currentPage ? (
+              <span className="shop-page-number active" aria-current="page" key={item}>{item}</span>
+            ) : (
+              <Link className="shop-page-number" href={shopPageHref(params, item)} key={item}>{item}</Link>
+            ))}
+          </div>
+          {nextPage ? (
+            <Link className="shop-page-step" href={shopPageHref(params, nextPage)}>Next</Link>
+          ) : (
+            <span className="shop-page-step disabled" aria-disabled="true">Next</span>
+          )}
+        </nav>
+      ) : null}
+    </div>
   );
 }
 
@@ -215,6 +305,37 @@ function categoryHref(category: string, params: ShopParams) {
   if (params.brand) search.set("brand", params.brand);
   if (params.stock) search.set("stock", params.stock);
   return `/shop?${search.toString()}`;
+}
+
+function shopPageHref(params: ShopParams, page: number) {
+  const search = new URLSearchParams();
+  if (params.category) search.set("category", params.category);
+  if (params.q) search.set("q", params.q);
+  if (params.sort) search.set("sort", params.sort);
+  if (params.brand) search.set("brand", params.brand);
+  if (params.stock) search.set("stock", params.stock);
+  if (params.min) search.set("min", params.min);
+  if (params.max) search.set("max", params.max);
+  if (params.featured) search.set("featured", params.featured);
+  if (params.view) search.set("view", params.view);
+  if (page > 1) search.set("page", String(page));
+  const query = search.toString();
+  return query ? `/shop?${query}#shop-results` : "/shop#shop-results";
+}
+
+function paginationItems(currentPage: number, totalPages: number): Array<number | "ellipsis"> {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const items = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+  const sorted = Array.from(items)
+    .filter((item) => item >= 1 && item <= totalPages)
+    .sort((a, b) => a - b);
+  const output: Array<number | "ellipsis"> = [];
+  for (const item of sorted) {
+    const previous = output[output.length - 1];
+    if (typeof previous === "number" && item - previous > 1) output.push("ellipsis");
+    output.push(item);
+  }
+  return output;
 }
 
 function childCount(category: { children: Array<{ _count: { products: number } }> }) {
