@@ -1,10 +1,10 @@
 import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { NextResponse } from "next/server";
 
-const fallbackLogoPath =
-  "E:\\FALCON\\ALEKTRA RENEWABLE\\COMPANY DOCS\\ALEKTRA BROCHURE\\ALEKTRA HEADER FOOTER\\Thermal display.png";
+const fallbackLogoPath = path.join(process.cwd(), "public", "brand", "alektra-thermal-logo.png");
 
 export async function GET() {
   const filePath = process.env.THERMAL_LOGO_PATH || fallbackLogoPath;

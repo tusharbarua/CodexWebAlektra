@@ -490,6 +490,7 @@ Read the full deployment documents before production release:
 
 - `HOSTINGER_VPS_DEPLOYMENT.md`
 - `DEPLOYMENT_CHECKLIST.md`
+- `docs/DOKPLOY_DOCKER_DEPLOYMENT.md`
 - `docs/POSTGRESQL_MIGRATION_PLAN.md`
 - `PRE_DEPLOYMENT_AUDIT.md`
 - `FINAL_PRE_DEPLOYMENT_AUDIT.md`

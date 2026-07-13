@@ -1,9 +1,3 @@
-import bundleAnalyzer from "@next/bundle-analyzer";
-
-const withBundleAnalyzer = bundleAnalyzer({
-  enabled: process.env.ANALYZE === "true"
-});
-
 const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -35,4 +29,10 @@ const nextConfig = {
   }
 };
 
-export default withBundleAnalyzer(nextConfig);
+async function applyBundleAnalyzer(config) {
+  if (process.env.ANALYZE !== "true") return config;
+  const bundleAnalyzer = (await import("@next/bundle-analyzer")).default;
+  return bundleAnalyzer({ enabled: true })(config);
+}
+
+export default await applyBundleAnalyzer(nextConfig);
