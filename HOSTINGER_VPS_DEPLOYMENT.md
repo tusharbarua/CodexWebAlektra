@@ -1,26 +1,119 @@
 # Hostinger VPS Deployment Notes
 
-## Important Database Note
-The current Prisma schema uses `provider = "sqlite"`. Hostinger PostgreSQL is the preferred production target, but this repo is not yet PostgreSQL-ready because the schema provider and migration history must be converted and tested for PostgreSQL.
+## Production Database Strategy
 
-Use one of these paths:
-- **Staging now:** deploy with current SQLite config using a persistent database file and backups.
-- **Preferred production:** first create a PostgreSQL migration branch, convert Prisma provider/migrations, migrate data, and run a full staging rehearsal.
+The working local project still keeps the original SQLite schema at `prisma/schema.prisma` so the current `dev.db` and local build remain safe. For Hostinger VPS production, use the PostgreSQL schema and migration path in:
 
-## Commands
+```text
+prisma/postgresql/schema.prisma
+prisma/postgresql/migrations/
+```
+
+Recommended database strategy:
+
+- Use SQLite only for quick local testing snapshots.
+- Use PostgreSQL for staging and production.
+- Ideally use PostgreSQL locally as well before launch so development matches production.
+- Never assume Prisma schema migration will move SQLite data into PostgreSQL. Schema migration and data migration are separate steps.
+
+## PostgreSQL Setup On Ubuntu/Hostinger VPS
+
+```bash
+sudo apt update
+sudo apt install postgresql postgresql-contrib -y
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+
+sudo -u postgres psql
+CREATE DATABASE alektra_website;
+CREATE USER alektra_user WITH ENCRYPTED PASSWORD 'strong_password_here';
+GRANT ALL PRIVILEGES ON DATABASE alektra_website TO alektra_user;
+\c alektra_website
+GRANT ALL ON SCHEMA public TO alektra_user;
+\q
+```
+
+Keep PostgreSQL listening locally only. Do not expose port `5432` publicly.
+
+Production `.env`:
+
+```env
+DATABASE_URL="postgresql://alektra_user:strong_password_here@localhost:5432/alektra_website"
+```
+
+## SQLite To PostgreSQL Data Migration
+
+Run these from the current SQLite project before deploying:
+
+```bash
+pnpm run db:backup:sqlite
+pnpm run db:export:sqlite
+```
+
+This creates:
+
+```text
+backups/sqlite/dev-YYYYMMDD-HHMMSS.db
+backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json
+```
+
+Copy the export JSON to the VPS or staging server, then run PostgreSQL migrations and import:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run db:pg:generate
+pnpm run db:pg:deploy
+
+DATABASE_URL="postgresql://alektra_user:strong_password_here@localhost:5432/alektra_website" \
+pnpm run db:import:postgres -- --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json
+```
+
+The import script refuses non-PostgreSQL URLs and refuses non-empty destination databases unless `--truncate` is explicitly passed.
+
+## Build And Run
+
+Use a PostgreSQL `DATABASE_URL` in production. The default `pnpm run build` now chooses the Prisma schema from `DATABASE_URL`; with a PostgreSQL URL it generates Prisma Client from `prisma/postgresql/schema.prisma`.
+
 ```bash
 corepack enable
 corepack prepare pnpm@11.7.0 --activate
 pnpm install --frozen-lockfile
 cp .env.example .env
-pnpm run db:deploy
+
+pnpm run db:generate:postgres
+pnpm run db:deploy:postgres
 pnpm run build
+pnpm run db:verify:postgres
+
 mkdir -p logs
 pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
+Reload after updates:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run db:deploy:postgres
+pnpm run build
+pnpm run db:verify:postgres
+pm2 reload alektra-website
+```
+
+Equivalent explicit commands:
+
+```bash
+npx prisma generate --schema=prisma/postgresql/schema.prisma
+npx prisma migrate deploy --schema=prisma/postgresql/schema.prisma
+npm run build
+npm run db:verify:postgres
+pm2 start ecosystem.config.cjs
+```
+
+Do not deploy production with `DATABASE_URL="file:..."`. That is the local SQLite format.
+
 ## Nginx Skeleton
+
 ```nginx
 server {
   listen 80;
@@ -58,7 +151,9 @@ server {
 ```
 
 ## Email
+
 Use Hostinger SMTP:
+
 - `SMTP_HOST=smtp.hostinger.com`
 - `SMTP_PORT=465`
 - `SMTP_SECURE=true`
@@ -70,19 +165,33 @@ Use Hostinger SMTP:
 Test order confirmation, verification, password reset, guest account setup, and admin SMTP test after staging deploy.
 
 ## Uploads
+
 Keep `public/uploads` persistent across deployments. Do not delete it during git pulls/builds. Back up uploads daily.
 
 ## Backups
-- SQLite current-state deployment: back up the database file and `public/uploads`.
-- PostgreSQL future deployment: use `pg_dump` plus upload backup.
+
+PostgreSQL backup example:
+
+```bash
+pg_dump -U alektra_user -h localhost alektra_website > alektra_website_backup.sql
+```
+
+Also back up:
+
+- `public/uploads`
+- `storage`
+- `.env` stored securely outside git
+- latest SQLite export JSON until migration is fully verified
 
 ## Staging Manual Checks
+
 - Desktop and mobile header/menu/footer.
 - Footer legal modal global overlay.
-- Shop product cards and cart drawer.
+- Shop product cards, category filtering, search, pagination, and cart drawer.
 - Checkout with and without logged-in customer.
 - Optional guest account creation.
 - Customer login/logout/register/profile/address/orders.
+- Customer verification and password reset tokens.
 - Project create/edit and Feature this on Resources.
 - Resource edit and resource detail page.
 - Upload invalid file rejection.

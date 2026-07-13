@@ -1,0 +1,953 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  SHOP_MANAGER
+  CUSTOMER
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum OrderStatus {
+  PENDING
+  NEW
+  CONFIRMED
+  PROCESSING
+  BOOKED_FOR_SHIPPING
+  HANDED_TO_COURIER
+  PRODUCT_RECEIVED
+  PAYMENT_CLEARED
+  READY_FOR_PICKUP
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  RETURNED_ISSUE
+}
+
+enum PaymentMethod {
+  SSLCOMMERZ
+  CASH_ON_DELIVERY
+}
+
+enum PaymentStatus {
+  UNPAID
+  CASH_ON_DELIVERY
+  PENDING
+  INITIATED
+  PAID
+  PAYMENT_CLEARED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum IntegrationProvider {
+  SOLISCLOUD
+  SUNGROW_ISOLARCLOUD
+  SMA_SUNNY_PORTAL
+  GENERIC
+}
+
+enum ThermalInspectionType {
+  STANDARD
+  COMPREHENSIVE
+}
+
+enum ThermalRequestStatus {
+  NEW
+  REVIEWED
+  QUOTED
+  AWAITING_PAYMENT
+  PAID
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum SparkleServiceType {
+  ROUTINE_CLEANING
+  ONE_TIME_DEEP_CLEANING
+  SCHEDULED_MAINTENANCE_CLEANING
+  INSPECTION_CLEANING_COORDINATION
+}
+
+enum SparkleRequestStatus {
+  NEW
+  REVIEWED
+  QUOTED
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PageKey {
+  epc
+  thermal
+  sparkle
+  mapping
+}
+
+model User {
+  id                 String               @id @default(cuid())
+  name               String?
+  email              String               @unique
+  phone              String?
+  emailVerified      DateTime?
+  image              String?
+  passwordHash       String?
+  role               Role                 @default(CUSTOMER)
+  appRoleId          String?
+  isActive           Boolean              @default(true)
+  lastLoginAt        DateTime?
+  appRole            AppRole?             @relation(fields: [appRoleId], references: [id])
+  accounts           Account[]
+  sessions           Session[]
+  orders             Order[]
+  orderStatusChanges OrderStatusHistory[]
+  articles           ResourceArticle[]    @relation("ArticleAuthor")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+}
+
+model AppRole {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  description String?
+  isSystem    Boolean             @default(false)
+  users       User[]
+  permissions AppRolePermission[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model AppRolePermission {
+  id        String   @id @default(cuid())
+  roleId    String
+  module    String
+  action    String
+  role      AppRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([roleId, module, action])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Customer {
+  id                  String                           @id @default(cuid())
+  fullName            String
+  email               String                           @unique
+  emailVerified       Boolean                          @default(false)
+  emailVerifiedAt     DateTime?
+  mobileNumber        String?
+  passwordHash        String
+  isActive            Boolean                          @default(true)
+  lastLoginAt         DateTime?
+  verificationTokens  CustomerEmailVerificationToken[]
+  passwordResetTokens CustomerPasswordResetToken[]
+  addresses           CustomerAddress[]
+  orders              Order[]
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+}
+
+model CustomerEmailVerificationToken {
+  id         String    @id @default(cuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt])
+}
+
+model CustomerPasswordResetToken {
+  id         String    @id @default(cuid())
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, expiresAt])
+}
+
+model CustomerAddress {
+  id            String   @id @default(cuid())
+  customerId    String
+  recipientName String
+  mobileNumber  String
+  divisionId    String?
+  divisionName  String
+  districtId    String?
+  districtName  String
+  upazilaId     String?
+  upazilaName   String
+  addressLine   String
+  postalCode    String?
+  deliveryNotes String?
+  isDefault     Boolean  @default(false)
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([customerId, isDefault])
+}
+
+model SeoMetadata {
+  id          String   @id @default(cuid())
+  route       String   @unique
+  title       String
+  description String
+  keywords    Json
+  ogImage     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SiteContent {
+  id        String        @id @default(cuid())
+  key       String        @unique
+  title     String
+  body      String
+  status    PublishStatus @default(PUBLISHED)
+  metadata  Json?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Page {
+  id              String        @id @default(cuid())
+  pageKey         PageKey       @unique
+  title           String
+  slug            String        @unique
+  metaTitle       String?
+  metaDescription String?
+  status          PublishStatus @default(DRAFT)
+  sections        PageSection[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model PageSection {
+  id           String            @id @default(cuid())
+  pageId       String
+  sectionKey   String
+  sectionType  String
+  title        String
+  subtitle     String?
+  body         String?
+  sortOrder    Int               @default(0)
+  isPublished  Boolean           @default(true)
+  settingsJson Json?
+  page         Page              @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  items        PageSectionItem[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([pageId, sectionKey])
+}
+
+model PageSectionItem {
+  id           String      @id @default(cuid())
+  sectionId    String
+  title        String
+  subtitle     String?
+  body         String?
+  icon         String?
+  imagePath    String?
+  videoPath    String?
+  linkText     String?
+  linkUrl      String?
+  badge        String?
+  sortOrder    Int         @default(0)
+  settingsJson Json?
+  isPublished  Boolean     @default(true)
+  section      PageSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model SiteSettings {
+  id                String   @id @default(cuid())
+  singletonKey      String   @unique @default("footer")
+  contactEmail      String   @default("contact@alektraepc.com")
+  contactPhone      String   @default("+880 1735 954 844")
+  secondaryPhone    String?
+  address           String   @default("Chattogram | Dhaka | Bangladesh")
+  facebookUrl       String?
+  linkedinUrl       String?
+  youtubeUrl        String?
+  whatsappNumber    String?
+  footerDescription String   @default("Solar EPC, thermal inspection, cleaning and mapping for renewable-energy assets in Bangladesh.")
+  copyrightText     String   @default("Copyright (c) Alektra Renewable. All rights reserved.")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model HeroMedia {
+  id              String        @id @default(cuid())
+  pageKey         PageKey       @default(epc)
+  title           String
+  mediaType       String
+  url             String
+  filePath        String?
+  posterImagePath String?
+  alt             String
+  altText         String?
+  mimeType        String?
+  fileSize        Int?
+  sortOrder       Int           @default(0)
+  isPrimary       Boolean       @default(false)
+  isPublished     Boolean       @default(true)
+  status          PublishStatus @default(PUBLISHED)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([pageKey, isPublished, isPrimary, sortOrder])
+}
+
+model Project {
+  id                 String         @id @default(cuid())
+  title              String
+  slug               String         @unique
+  clientName         String?
+  location           String
+  projectType        String
+  capacityKw         Decimal
+  commissionedAt     DateTime?
+  coverImage         String?
+  summary            String
+  fullCaseStudy      String         @default("")
+  isFeatured         Boolean        @default(false)
+  featureOnResources Boolean        @default(false)
+  inverterBrandModel String?
+  moduleBrandModel   String?
+  imageUrls          Json?
+  images             ProjectImage[]
+  videoUrl           String?
+  annualGeneration   Decimal?
+  annualSavingsBdt   Decimal?
+  status             PublishStatus  @default(PUBLISHED)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([status, isFeatured])
+  @@index([status, isFeatured, commissionedAt, createdAt])
+}
+
+model ProjectImage {
+  id        String   @id @default(cuid())
+  projectId String
+  imagePath String
+  altText   String
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ImpactSnapshot {
+  id                       String   @id @default(cuid())
+  plantsInOperation        Int
+  totalInstalledCapacityKw Decimal
+  kwhGenerated             Decimal
+  equivalentTreesPlanted   Decimal
+  co2OffsetTons            Decimal
+  longHaulFlightsAvoided   Decimal
+  manualBaselineJson       Json
+  lastCalculatedAt         DateTime @default(now())
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model ImpactDailyLedger {
+  id              String               @id @default(cuid())
+  source          String
+  provider        IntegrationProvider?
+  externalPlantId String?
+  date            DateTime
+  kwhGenerated    Decimal
+  co2OffsetTons   Decimal
+  treesEquivalent Decimal
+  flightsAvoided  Decimal
+  rawPayload      Json?
+  createdAt       DateTime             @default(now())
+
+  @@unique([source, externalPlantId, date])
+}
+
+model MonitoringIntegration {
+  id                   String              @id @default(cuid())
+  provider             IntegrationProvider
+  label                String
+  baseUrl              String?
+  apiKey               String?
+  apiSecret            String?
+  username             String?
+  password             String?
+  plantMapping         String?
+  syncFrequencyMinutes Int                 @default(1440)
+  isEnabled            Boolean             @default(false)
+  lastSyncAt           DateTime?
+  lastSyncStatus       String?
+  lastSyncMessage      String?
+  errorLog             String?
+  settings             Json?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+}
+
+model ResourceCategory {
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  description String
+  icon        String?
+  sortOrder   Int               @default(0)
+  status      PublishStatus     @default(PUBLISHED)
+  articles    ResourceArticle[]
+}
+
+model ResourceArticle {
+  id              String           @id @default(cuid())
+  title           String
+  slug            String           @unique
+  excerpt         String
+  body            String
+  coverImage      String?
+  coverImageAlt   String?
+  status          PublishStatus    @default(DRAFT)
+  isFeatured      Boolean          @default(false)
+  readTimeMinutes Int?
+  categoryId      String
+  authorId        String?
+  publishedAt     DateTime?
+  seoTitle        String?
+  seoDescription  String?
+  sourceType      String?
+  sourceProjectId String?          @unique
+  category        ResourceCategory @relation(fields: [categoryId], references: [id])
+  author          User?            @relation("ArticleAuthor", fields: [authorId], references: [id])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([categoryId, status])
+  @@index([status, isFeatured, publishedAt])
+  @@index([sourceType])
+}
+
+model ProductCategory {
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  description String?
+  icon        String?
+  sortOrder   Int               @default(0)
+  status      PublishStatus     @default(PUBLISHED)
+  parentId    String?
+  parent      ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    ProductCategory[] @relation("CategoryTree")
+  products    Product[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Product {
+  id                   String          @id @default(cuid())
+  name                 String
+  slug                 String          @unique
+  sku                  String          @unique
+  model                String
+  brand                String
+  priceBdt             Decimal
+  compareAtPriceBdt    Decimal?
+  stockQuantity        Int
+  isFeatured           Boolean         @default(false)
+  status               PublishStatus   @default(DRAFT)
+  shortDescription     String
+  technicalDescription String
+  keyFeatures          Json?
+  warrantyNote         String?
+  supportNote          String?
+  datasheetUrl         String?
+  manualUrl            String?
+  specifications       Json
+  categoryId           String
+  category             ProductCategory @relation(fields: [categoryId], references: [id])
+  images               ProductImage[]
+  orderItems           OrderItem[]
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([categoryId, status])
+  @@index([status, isFeatured])
+  @@index([createdAt])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  imagePath String
+  altText   String
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, isPrimary, sortOrder])
+}
+
+model Coupon {
+  id           String    @id @default(cuid())
+  code         String    @unique
+  description  String?
+  discountType String
+  amount       Decimal
+  minimumSpend Decimal?
+  startsAt     DateTime?
+  expiresAt    DateTime?
+  usageLimit   Int?
+  usedCount    Int       @default(0)
+  isActive     Boolean   @default(true)
+  orders       Order[]
+}
+
+model DeliveryCharge {
+  id           String   @id @default(cuid())
+  zone         String   @unique
+  description  String?
+  chargeBdt    Decimal
+  freeAboveBdt Decimal?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EcommerceDeliverySetting {
+  id                      String   @id @default(cuid())
+  singletonKey            String   @unique @default("default")
+  courierEnabled          Boolean  @default(true)
+  courierMinimumChargeBdt Decimal  @default(200)
+  pickupEnabled           Boolean  @default(true)
+  pickupLabel             String   @default("Pick up from our warehouse")
+  pickupAddress           String   @default("Khulshi, Chattogram")
+  pickupChargeBdt         Decimal  @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model EcommerceCheckoutSetting {
+  id                     String   @id @default(cuid())
+  singletonKey           String   @unique @default("default")
+  requireOtpVerification Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model PaymentInstructionSetting {
+  id                         String   @id @default(cuid())
+  singletonKey               String   @unique @default("default")
+  manualBankTransferEnabled  Boolean  @default(true)
+  showBankInstructionInEmail Boolean  @default(true)
+  bankAccountName            String   @default("ALEKTRA RENEWABLE")
+  bankName                   String   @default("Dutch Bangla Bank Ltd")
+  branchName                 String   @default("OR Nizam Road")
+  accountNumber              String   @default("1291100024117")
+  routingNumber              String   @default("090151480")
+  paymentInstructionText     String   @default("After completing payment, please reply to this email with your deposit slip/payment receipt, or send it to our WhatsApp. Please write your order number clearly so that we can trace your payment quickly.")
+  paymentEmail               String   @default("contact@alektraepc.com")
+  whatsappNumber             String?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model ShopLegalContent {
+  id            String        @id @default(cuid())
+  policyKey     String        @unique
+  title         String
+  slug          String        @unique
+  content       String
+  version       String        @default("v1.0")
+  effectiveDate DateTime?
+  status        PublishStatus @default(PUBLISHED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model LegalDocument {
+  id            String        @id @default(cuid())
+  documentKey   String        @unique
+  title         String
+  slug          String        @unique
+  content       String
+  version       String        @default("v1.0")
+  effectiveDate DateTime?
+  status        PublishStatus @default(PUBLISHED)
+  updatedBy     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model MessagingIntegration {
+  id                        String    @id @default(cuid())
+  singletonKey              String    @unique @default("default")
+  providerName              String    @default("Not configured")
+  baseUrl                   String?
+  apiKey                    String?
+  senderId                  String?
+  otpTemplate               String    @default("Your Alektra Renewable OTP is [OTP]. It expires in 5 minutes.")
+  orderConfirmationTemplate String    @default("Your Alektra Renewable order #[ORDER_NUMBER] has been received. Total: BDT [TOTAL]. We will contact you shortly.")
+  isEnabled                 Boolean   @default(false)
+  lastTestStatus            String?
+  lastTestAt                DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+}
+
+model LocationDatasetSetting {
+  id                    String    @id @default(cuid())
+  singletonKey          String    @unique @default("default")
+  providerName          String    @default("bangladesh-geojson")
+  providerType          String    @default("Local package/data")
+  cacheDurationMinutes  Int       @default(1440)
+  lastTestStatus        String?
+  lastErrorMessage      String?
+  lastSearchQuery       String?
+  lastSearchResultCount Int       @default(0)
+  lastTestAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model OtpVerification {
+  id          String    @id @default(cuid())
+  mobile      String
+  codeHash    String
+  purpose     String    @default("checkout")
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  attempts    Int       @default(0)
+  resendCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([mobile, purpose, expiresAt])
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  orderId   String?
+  channel   String
+  recipient String
+  status    String
+  message   String
+  provider  String?
+  response  String?
+  createdAt DateTime @default(now())
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id                     String               @id @default(cuid())
+  orderNumber            String               @unique
+  userId                 String?
+  customerId             String?
+  customerName           String
+  customerEmail          String?
+  customerPhone          String
+  customerMobileNumber   String?
+  companyName            String?
+  verifiedMobile         String?
+  verifiedMobileNumber   String?
+  otpRequiredAtCheckout  Boolean              @default(false)
+  otpVerified            Boolean              @default(false)
+  billingAddress         Json
+  shippingAddress        Json
+  deliveryMethod         String               @default("COURIER")
+  deliveryLabel          String?
+  deliveryNotes          String?
+  subtotalBdt            Decimal
+  discountBdt            Decimal              @default(0)
+  deliveryBdt            Decimal              @default(0)
+  totalBdt               Decimal
+  status                 OrderStatus          @default(PENDING)
+  paymentMethod          PaymentMethod
+  paymentStatus          PaymentStatus        @default(UNPAID)
+  couponId               String?
+  notes                  String?
+  smsStatus              String               @default("NOT_CONFIGURED")
+  emailStatus            String               @default("NOT_CONFIGURED")
+  emailSentAt            DateTime?
+  emailLastError         String?
+  paymentInstructionSent Boolean              @default(false)
+  termsAccepted          Boolean              @default(false)
+  termsAcceptedAt        DateTime?
+  termsVersion           String?
+  refundPolicyVersion    String?
+  items                  OrderItem[]
+  transactions           PaymentTransaction[]
+  notifications          NotificationLog[]
+  statusHistory          OrderStatusHistory[]
+  user                   User?                @relation(fields: [userId], references: [id])
+  customer               Customer?            @relation(fields: [customerId], references: [id])
+  coupon                 Coupon?              @relation(fields: [couponId], references: [id])
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@index([customerId])
+  @@index([customerEmail])
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([paymentStatus, createdAt])
+}
+
+model OrderStatusHistory {
+  id              String         @id @default(cuid())
+  orderId         String
+  fromStatus      OrderStatus?
+  toStatus        OrderStatus
+  paymentStatus   PaymentStatus?
+  note            String?
+  changedByUserId String?
+  createdAt       DateTime       @default(now())
+  order           Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedBy       User?          @relation(fields: [changedByUserId], references: [id])
+
+  @@index([orderId, createdAt])
+}
+
+model OrderItem {
+  id           String  @id @default(cuid())
+  orderId      String
+  productId    String
+  name         String
+  sku          String
+  quantity     Int
+  unitPriceBdt Decimal
+  lineTotalBdt Decimal
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model PaymentTransaction {
+  id              String        @id @default(cuid())
+  orderId         String
+  provider        String
+  transactionId   String?       @unique
+  validationId    String?
+  amountBdt       Decimal
+  status          PaymentStatus
+  requestPayload  Json?
+  responsePayload Json?
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  interest  String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ThermalInspectionRequest {
+  id                        String                @id @default(cuid())
+  requestNumber             String                @unique
+  inspectionType            ThermalInspectionType
+  moduleDetails             Json
+  pvCapacityKwp             Decimal
+  acCapacityKw              Decimal
+  projectLocation           String
+  projectLocationName       String?
+  projectFormattedAddress   String?
+  googlePlaceId             String?
+  latitude                  Decimal?
+  longitude                 Decimal?
+  manualAddressFallback     String?
+  distanceFromBaseKm        Decimal?
+  distanceCalculationStatus String                @default("missing_project_coordinates")
+  institutionName           String
+  address                   String
+  email                     String
+  contactNumber             String
+  additionalNotes           String?
+  internalNotes             String?
+  askForPayment             Boolean               @default(false)
+  calculatedFeeBdt          Decimal?
+  paymentStatus             PaymentStatus         @default(UNPAID)
+  sslTransactionId          String?
+  pdfFilePath               String?
+  emailSentAt               DateTime?
+  adminEmailSentAt          DateTime?
+  status                    ThermalRequestStatus  @default(NEW)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+}
+
+model SparkleServiceRequest {
+  id                    String               @id @default(cuid())
+  requestNumber         String               @unique
+  serviceType           SparkleServiceType
+  moduleDetails         Json
+  pvCapacityKwp         Decimal
+  acCapacityKw          Decimal
+  divisionId            String?
+  divisionName          String?
+  districtId            String?
+  districtName          String?
+  upazilaId             String?
+  upazilaName           String?
+  postOffice            String?
+  postalCode            String?
+  addressLine           String
+  manualAddressFallback Boolean              @default(false)
+  institutionName       String
+  email                 String
+  contactNumber         String
+  additionalNotes       String?
+  internalNotes         String?
+  status                SparkleRequestStatus @default(NEW)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+}
+
+model MappingServiceRequest {
+  id                    String   @id @default(cuid())
+  requestNumber         String   @unique
+  serviceType           String
+  projectSiteType       String
+  projectSize           String
+  preferredMethod       String
+  requiredDeliverables  Json
+  divisionId            String?
+  divisionName          String?
+  districtId            String?
+  districtName          String?
+  upazilaId             String?
+  upazilaName           String?
+  postOffice            String?
+  postalCode            String?
+  addressLine           String
+  manualAddressFallback Boolean  @default(false)
+  institutionName       String
+  contactPerson         String
+  email                 String?
+  contactNumber         String
+  additionalNotes       String?
+  internalNotes         String?
+  status                String   @default("NEW")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model EpcProposalRequest {
+  id                String   @id @default(cuid())
+  requestNumber     String   @unique
+  institutionName   String
+  contactPerson     String
+  contactNumber     String
+  email             String?
+  address           String
+  facilityType      String
+  projectType       String
+  roofArea          String?
+  monthlyBill       String?
+  preferredCapacity String?
+  transformerInfo   String?
+  additionalNotes   String?
+  status            String   @default("NEW")
+  internalNotes     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model ThermalBaseLocation {
+  id            String   @id @default(cuid())
+  singletonKey  String   @unique @default("default")
+  name          String   @default("Alektra Renewable Base")
+  address       String?
+  googlePlaceId String?
+  latitude      Decimal  @default(22.3585575)
+  longitude     Decimal  @default(91.8196934)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ThermalPricingRule {
+  id                      String   @id @default(cuid())
+  name                    String   @unique
+  baseInspectionFeeBdt    Decimal  @default(0)
+  ratePerKwpBdt           Decimal  @default(0)
+  distanceChargePerKmBdt  Decimal  @default(0)
+  minimumInspectionFeeBdt Decimal  @default(0)
+  standardMultiplier      Decimal  @default(1)
+  comprehensiveMultiplier Decimal  @default(1.5)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}

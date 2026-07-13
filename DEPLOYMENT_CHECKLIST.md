@@ -2,19 +2,22 @@
 
 ## Current Go/No-Go
 - Build/lint/typecheck/audit are expected to pass before deployment.
-- Current Prisma datasource provider is `sqlite`. Do not deploy to PostgreSQL until the Prisma provider and migrations are converted/tested for PostgreSQL.
-- If deploying immediately with current code, use a persistent SQLite database file and back it up aggressively. PostgreSQL remains the recommended production target after migration conversion.
+- Current local Prisma datasource provider is `sqlite` in `prisma/schema.prisma` to protect the existing `dev.db` workflow.
+- Production PostgreSQL schema and migrations are in `prisma/postgresql/`.
+- Use PostgreSQL for staging and production. Do not deploy ecommerce/customer/order workflows on SQLite unless it is a temporary emergency rollback.
+- Back up `dev.db` and export SQLite data before any migration rehearsal.
 
 ## Install And Build
 - Ubuntu VPS with Node.js LTS.
 - Enable pnpm through Corepack: `corepack enable && corepack prepare pnpm@11.7.0 --activate`.
 - Install dependencies: `pnpm install --frozen-lockfile`.
 - Configure `.env` from `.env.example`; never commit real secrets.
-- Generate Prisma client: `pnpm run db:generate`.
-- Apply migrations: `pnpm run db:deploy`.
-- Build: `pnpm run build`.
+- Generate PostgreSQL Prisma client: `pnpm run db:generate:postgres`.
+- Apply PostgreSQL migrations: `pnpm run db:deploy:postgres`.
+- Build with PostgreSQL `DATABASE_URL`: `pnpm run build`.
+- Verify generated client provider: `pnpm run db:verify:postgres`.
 - Start with PM2: `mkdir -p logs && pm2 start ecosystem.config.cjs && pm2 save`.
-- Reload after updates: `pnpm install --frozen-lockfile && pnpm run db:deploy && pnpm run build && pm2 reload alektra-website`.
+- Reload after updates: `pnpm install --frozen-lockfile && pnpm run db:deploy:postgres && pnpm run build && pnpm run db:verify:postgres && pm2 reload alektra-website`.
 
 ## Required Environment
 - `DATABASE_URL`
@@ -62,11 +65,18 @@
 - Compress hero videos before upload and keep MP4/WebM optimized.
 
 ## Database
-- Current repo migrations are SQLite-oriented.
-- PostgreSQL deployment requires a separate migration conversion and staging rehearsal.
+- Production database: PostgreSQL.
+- Production schema path: `prisma/postgresql/schema.prisma`.
+- Production migration command: `pnpm run db:deploy:postgres`.
+- Backup current SQLite data before migration: `pnpm run db:backup:sqlite`.
+- Export current SQLite data: `pnpm run db:export:sqlite`.
+- Import exported JSON after PostgreSQL schema deploy:
+  `DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/alektra_website" pnpm run db:import:postgres -- --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json`.
+- Never use `DATABASE_URL="file:..."` for production.
+- Verify row counts after import against the export metadata.
 - Do not expose the database publicly.
 - Back up before every deploy and daily after launch.
-- For current SQLite deployment, store the database outside ephemeral build output and back up the `.db` file.
+- Keep the original SQLite `dev.db` and backup files until PostgreSQL staging and production are fully verified.
 
 ## Security Hardening
 - SSH key login only.
@@ -109,3 +119,11 @@
 - OWASP ZAP baseline scan against staging only.
 - `pnpm audit` and optional Snyk dependency scan.
 - Trivy only if a Docker image is introduced.
+
+## PostgreSQL Migration Verification
+
+- Public pages: `/`, `/thermal`, `/sparkle`, `/mapping`, `/resources`, one resource article, `/shop`, one product detail.
+- Shop: category filtering, search, 16-item pagination, cart drawer, checkout, order creation, order email.
+- Customer: register, email verification, login, logout, forgot password, reset password, add/edit address, order history.
+- Admin: login, products, orders, customers, projects, Feature this on Resources, Resources/articles, legal content, media upload.
+- Security: customer cannot access admin; customer cannot see another customer order; admin routes are protected; verification/reset tokens expire.

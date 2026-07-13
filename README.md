@@ -45,7 +45,8 @@ Detected from `package.json`, Prisma schema, and project structure:
 | Language | TypeScript |
 | Styling | Global CSS in `src/app/globals.css` |
 | Database ORM | Prisma |
-| Current database provider | SQLite, configured in `prisma/schema.prisma` |
+| Local database provider | SQLite, configured in `prisma/schema.prisma` |
+| Production database target | PostgreSQL, configured in `prisma/postgresql/schema.prisma` |
 | Authentication | NextAuth v5 beta for admin/auth integration; custom customer session utilities in `src/lib/customer-auth.ts` |
 | Password hashing | `bcryptjs` |
 | Validation | `zod` |
@@ -59,7 +60,7 @@ Detected from `package.json`, Prisma schema, and project structure:
 | Reverse proxy | Nginx, documented in `HOSTINGER_VPS_DEPLOYMENT.md` |
 | Load testing | k6 script in `load-tests/k6-smoke.js` |
 
-Important database note: the current repo is SQLite-based. The deployment docs identify PostgreSQL as the preferred future production target, but the Prisma provider and migration history must be converted and tested before deploying this codebase against PostgreSQL.
+Important database note: the current local workflow is SQLite-based to protect the existing `dev.db`. PostgreSQL is the recommended staging and production database. A separate PostgreSQL schema and migration path exists under `prisma/postgresql/`.
 
 ## Main Features
 
@@ -141,16 +142,18 @@ Important database note: the current repo is SQLite-based. The deployment docs i
 .
 ├── docs/                         # Additional documentation assets if needed
 ├── load-tests/                   # k6 smoke/load test scripts
-├── prisma/                       # Prisma schema, migrations, seed script
-│   ├── migrations/
-│   ├── schema.prisma
+├── backups/                      # Local database backups and JSON exports; do not deploy blindly
+├── prisma/                       # Prisma schemas, migrations, seed script
+│   ├── migrations/               # Current SQLite migration history
+│   ├── postgresql/               # PostgreSQL production schema and migrations
+│   ├── schema.prisma             # Current local SQLite schema
 │   └── seed.ts
 ├── public/                       # Static public assets
 │   ├── brand/
 │   ├── brochure-assets/
 │   ├── uploads/
 │   └── videos/
-├── scripts/                      # Utility scripts, including impact update job
+├── scripts/                      # Utility scripts, including DB migration helpers and impact job
 ├── src/
 │   ├── app/                      # Next.js App Router routes, layouts, API routes, admin pages
 │   ├── components/               # Shared UI and feature components
@@ -173,7 +176,8 @@ Use `.env.local` for local development and a server-side `.env` file for product
 The current `.env.example` contains the safe template. Key variables include:
 
 ```env
-DATABASE_URL="file:../production.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME"
+SQLITE_DATABASE_URL="file:../dev.db"
 
 APP_URL="https://alektraepc.com"
 NEXT_PUBLIC_APP_URL="https://alektraepc.com"
@@ -223,7 +227,8 @@ S3_SECRET_ACCESS_KEY=""
 Notes:
 
 - Generate strong random values for `AUTH_SECRET`, `NEXTAUTH_SECRET`, and `CUSTOMER_SESSION_SECRET`.
-- `DATABASE_URL` currently points to SQLite. For PostgreSQL, first convert Prisma provider and migrations in a dedicated migration branch.
+- `DATABASE_URL` should point to PostgreSQL in staging/production.
+- `SQLITE_DATABASE_URL` is only a reference for local SQLite snapshots; the current local `.env` may still use `DATABASE_URL="file:../dev.db"` for quick development.
 - `ADMIN_PASSWORD` is only for initial seeding/bootstrap. Rotate it after setup.
 - SMTP and SSLCommerz secrets must never be committed.
 - Keep `public/uploads` persistent in production.
@@ -272,6 +277,13 @@ pnpm run db:generate
 pnpm run db:migrate
 ```
 
+For local PostgreSQL/staging rehearsal, set `DATABASE_URL` to a PostgreSQL database and use:
+
+```bash
+pnpm run db:pg:generate
+pnpm run db:pg:deploy
+```
+
 6. Seed initial data if needed.
 
 ```bash
@@ -305,7 +317,8 @@ Actual scripts from `package.json`:
 | Command | Description |
 | --- | --- |
 | `pnpm run dev` | Starts the local Next.js development server |
-| `pnpm run build` | Runs `prisma generate` and creates the production Next.js build |
+| `pnpm run build` | Generates Prisma Client based on `DATABASE_URL` and creates the Next.js build |
+| `pnpm run build:postgres` | Generates Prisma client from the PostgreSQL schema and builds Next.js |
 | `pnpm run start` | Starts the production Next.js server |
 | `pnpm run lint` | Runs ESLint checks |
 | `pnpm run typecheck` | Runs TypeScript type checking with `tsc --noEmit` |
@@ -315,6 +328,16 @@ Actual scripts from `package.json`:
 | `pnpm run db:generate` | Generates Prisma client |
 | `pnpm run db:migrate` | Runs Prisma development migrations |
 | `pnpm run db:deploy` | Applies Prisma migrations in production/deployment |
+| `pnpm run db:pg:generate` | Generates Prisma client from `prisma/postgresql/schema.prisma` |
+| `pnpm run db:pg:migrate` | Runs development migrations against the PostgreSQL schema |
+| `pnpm run db:pg:deploy` | Applies PostgreSQL production migrations |
+| `pnpm run db:pg:studio` | Opens Prisma Studio using the PostgreSQL schema |
+| `pnpm run db:generate:postgres` | Alias for PostgreSQL Prisma Client generation |
+| `pnpm run db:deploy:postgres` | Alias for PostgreSQL production migration deploy |
+| `pnpm run db:import:postgres` | Imports a SQLite JSON export into PostgreSQL |
+| `pnpm run db:verify:postgres` | Verifies generated Prisma Client was built from PostgreSQL schema |
+| `pnpm run db:backup:sqlite` | Copies `dev.db` into `backups/sqlite/` with a timestamp |
+| `pnpm run db:export:sqlite` | Exports all Prisma models from SQLite into JSON |
 | `pnpm run db:seed` | Seeds the database with `prisma/seed.ts` |
 | `pnpm run impact:daily` | Runs the daily impact update job |
 
@@ -325,8 +348,10 @@ If using npm instead of pnpm, replace `pnpm run` with `npm run`.
 Current database setup:
 
 - Prisma ORM
-- SQLite provider in `prisma/schema.prisma`
-- Migrations in `prisma/migrations`
+- SQLite provider in `prisma/schema.prisma` for the existing local `dev.db`
+- PostgreSQL provider in `prisma/postgresql/schema.prisma` for staging/production
+- SQLite migrations in `prisma/migrations`
+- PostgreSQL migrations in `prisma/postgresql/migrations`
 - Seed script in `prisma/seed.ts`
 
 Development commands:
@@ -337,18 +362,30 @@ pnpm run db:migrate
 pnpm run db:seed
 ```
 
-Production migration command for the current provider:
+Production PostgreSQL migration command:
 
 ```bash
-pnpm run db:deploy
+pnpm run db:pg:deploy
+```
+
+SQLite to PostgreSQL data migration:
+
+```bash
+pnpm run db:backup:sqlite
+pnpm run db:export:sqlite
+
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME" pnpm run db:generate:postgres
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME" pnpm run db:deploy:postgres
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME" pnpm run db:import:postgres -- --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json
 ```
 
 Backup notes:
 
 - Back up the SQLite database file before every production migration.
+- Keep `dev.db` until PostgreSQL staging and production data are verified.
 - Do not store the database file in a disposable deployment directory unless it is intentionally persistent.
 - Do not expose any database service publicly.
-- If moving to PostgreSQL, create a dedicated migration branch, convert the Prisma provider/migration history, migrate data, and rehearse on staging before production.
+- Back up PostgreSQL with `pg_dump` after migration and before every release.
 
 ## Media and Uploads
 
@@ -412,8 +449,7 @@ Recommended production stack:
 - Hostinger VPS
 - Ubuntu
 - Node.js LTS
-- Current database provider: SQLite with persistent file and backups
-- Preferred future database target: PostgreSQL after Prisma conversion
+- Production database: PostgreSQL
 - Nginx reverse proxy
 - PM2 process manager
 - SSL/TLS certificates
@@ -429,8 +465,10 @@ git clone <repo-url> alektra-website
 cd alektra-website
 
 pnpm install --frozen-lockfile
-pnpm run db:deploy
+pnpm run db:generate:postgres
+pnpm run db:deploy:postgres
 pnpm run build
+pnpm run db:verify:postgres
 ```
 
 Start with PM2:
@@ -452,6 +490,7 @@ Read the full deployment documents before production release:
 
 - `HOSTINGER_VPS_DEPLOYMENT.md`
 - `DEPLOYMENT_CHECKLIST.md`
+- `docs/POSTGRESQL_MIGRATION_PLAN.md`
 - `PRE_DEPLOYMENT_AUDIT.md`
 - `FINAL_PRE_DEPLOYMENT_AUDIT.md`
 
