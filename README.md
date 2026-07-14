@@ -336,6 +336,8 @@ Actual scripts from `package.json`:
 | `pnpm run db:deploy:postgres` | Alias for PostgreSQL production migration deploy |
 | `pnpm run db:import:postgres` | Imports a SQLite JSON export into PostgreSQL |
 | `pnpm run db:verify:postgres` | Verifies generated Prisma Client was built from PostgreSQL schema |
+| `pnpm run db:diagnose` | Prints safe database counts, migration status, CMS page counts, and media-path checks |
+| `pnpm run verify:deployment` | Runs deployment diagnostics and optional public URL smoke checks |
 | `pnpm run db:backup:sqlite` | Copies `dev.db` into `backups/sqlite/` with a timestamp |
 | `pnpm run db:export:sqlite` | Exports all Prisma models from SQLite into JSON |
 | `pnpm run db:seed` | Seeds the database with `prisma/seed.ts` |

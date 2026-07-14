@@ -24,6 +24,8 @@
     "db:deploy:postgres": "prisma migrate deploy --schema prisma/postgresql/schema.prisma",
     "db:import:postgres": "node scripts/db/import-json-to-postgres.js",
     "db:verify:postgres": "node scripts/db/verify-prisma-client-provider.js postgresql",
+    "db:diagnose": "node scripts/db/diagnose-production-data.js",
+    "verify:deployment": "node scripts/deployment/verify-deployment.js",
     "db:backup:sqlite": "node scripts/db/backup-sqlite-db.js",
     "db:export:sqlite": "node scripts/db/export-sqlite-to-json.js",
     "db:seed": "tsx prisma/seed.ts",

@@ -177,9 +177,29 @@ DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE_NAME" \
 npm run db:import:postgres -- --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json
 ```
 
+If the export file is already copied to `backups/sqlite-export/` and is the newest/only export, `npm run db:import:postgres` will use it automatically.
+
 Do not seed production after importing real data.
 
 Full migration runbook: `docs/POSTGRESQL_MIGRATION_PLAN.md`.
+
+## Post-Deployment Data Verification
+
+After every staging or production deployment, run:
+
+```bash
+pnpm run db:verify:postgres
+pnpm run db:diagnose
+pnpm run verify:deployment -- --url https://your-dokploy-host
+```
+
+The diagnostic output should show non-zero counts for products, CMS pages, page sections, resources, legal documents, and settings after real data has been imported.
+
+If `/shop` shows no products or Thermal/Sparkle/Mapping render only header/footer, the PostgreSQL schema likely exists but the SQLite JSON export was not imported.
+
+If logos/images are missing, verify the persistent volume mounted at `/app/public/uploads` and check `media.missingLocalMedia` in `pnpm run db:diagnose`.
+
+Detailed checklist: `POST_DEPLOYMENT_VERIFY.md`.
 
 ## Backups
 

@@ -5,15 +5,29 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 const projectRoot = path.resolve(__dirname, "..", "..");
+const exportDir = path.join(projectRoot, "backups", "sqlite-export");
+
+function latestExportPath() {
+  if (!fs.existsSync(exportDir)) return null;
+  const files = fs.readdirSync(exportDir)
+    .filter((name) => /^sqlite-export-.+\.json$/.test(name))
+    .map((name) => {
+      const fullPath = path.join(exportDir, name);
+      return { fullPath, mtimeMs: fs.statSync(fullPath).mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return files[0]?.fullPath ?? null;
+}
 
 const inputArgIndex = process.argv.indexOf("--input");
 const inputPath = inputArgIndex >= 0 && process.argv[inputArgIndex + 1]
   ? path.resolve(projectRoot, process.argv[inputArgIndex + 1])
-  : null;
+  : latestExportPath();
 const shouldTruncate = process.argv.includes("--truncate");
 
 if (!inputPath) {
   console.error("Missing input file. Usage: node scripts/db/import-json-to-postgres.js --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json");
+  console.error(`No sqlite-export-*.json file was found in ${exportDir}. Copy the SQLite export there or pass --input.`);
   process.exit(1);
 }
 
@@ -119,6 +133,7 @@ async function truncateDestination() {
 }
 
 async function main() {
+  console.log(`Using SQLite export: ${inputPath}`);
   const payload = JSON.parse(fs.readFileSync(inputPath, "utf8"));
   if (!payload.models || typeof payload.models !== "object") {
     throw new Error("Invalid export file: missing models object.");

@@ -66,9 +66,22 @@ pnpm run db:pg:deploy
 
 DATABASE_URL="postgresql://alektra_user:strong_password_here@localhost:5432/alektra_website" \
 pnpm run db:import:postgres -- --input backups/sqlite-export/sqlite-export-YYYYMMDD-HHMMSS.json
+
+pnpm run db:diagnose
 ```
 
+If the export JSON has already been copied to `backups/sqlite-export/` and is the newest/only export, `pnpm run db:import:postgres` will use it automatically.
+
 The import script refuses non-PostgreSQL URLs and refuses non-empty destination databases unless `--truncate` is explicitly passed.
+
+Also copy or mount persistent media:
+
+```text
+public/uploads/
+storage/
+```
+
+Missing `/shop` products or empty Thermal/Sparkle/Mapping body sections after deployment usually means the schema was migrated but this SQLite data import step was missed.
 
 ## Build And Run
 
@@ -76,7 +89,7 @@ Use a PostgreSQL `DATABASE_URL` in production. The default `pnpm run build` now 
 
 ```bash
 corepack enable
-corepack prepare pnpm@11.7.0 --activate
+corepack prepare pnpm@11.12.0 --activate
 pnpm install --frozen-lockfile
 cp .env.example .env
 
@@ -84,6 +97,7 @@ pnpm run db:generate:postgres
 pnpm run db:deploy:postgres
 pnpm run build
 pnpm run db:verify:postgres
+pnpm run db:diagnose
 
 mkdir -p logs
 pm2 start ecosystem.config.cjs
@@ -97,6 +111,7 @@ pnpm install --frozen-lockfile
 pnpm run db:deploy:postgres
 pnpm run build
 pnpm run db:verify:postgres
+pnpm run db:diagnose
 pm2 reload alektra-website
 ```
 
