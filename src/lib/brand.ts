@@ -1,7 +1,7 @@
 export type DivisionKey = "epc" | "thermal" | "mapping" | "sparkle";
 
 export const brandLogos: Record<DivisionKey, string> = {
-  epc: "/brand/alektra-renewable-logo-asset-v3.png",
+  epc: "/brand/alektra-logo.svg",
   thermal: "/brand/alektra-thermal-logo.png",
   mapping: "/brand/alektra-mapping-logo.png",
   sparkle: "/brand/alektra-sparkle-logo.png"
