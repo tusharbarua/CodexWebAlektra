@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { CheckCircle2, CreditCard, Download } from "lucide-react";
 import { prisma } from "@/lib/prisma";
@@ -12,9 +13,14 @@ export default async function ThermalRequestSuccess({ searchParams }: { searchPa
   const request = await prisma.thermalInspectionRequest.findUnique({ where: { requestNumber } });
   if (!request) notFound();
   return <main className="thermal-page thermal-success"><div className="container thermal-success-card">
-    <CheckCircle2 size={48}/><p className="thermal-kicker">Request received</p><h1>Thank you for choosing Alektra Thermal.</h1>
-    <p>Our team will review your inspection request and contact you shortly.</p>
-    <div className="thermal-summary"><strong>{request.requestNumber}</strong><span>{request.inspectionType === "STANDARD" ? "Standard" : "Comprehensive"} inspection</span><span>{String(request.pvCapacityKwp)} kWp PV capacity</span><span>{request.institutionName}</span><span>Status: {request.status.replaceAll("_", " ")}</span></div>
+    <div className="thermal-success-brand">
+      <Image className="thermal-success-logo" src="/brand/alektra-thermal-logo.png" alt="Alektra Thermal" width={210} height={64} />
+      <CheckCircle2 size={44}/>
+    </div>
+    <p className="thermal-kicker">Thermal Inspection Request Submitted</p>
+    <h1>Thank you. Your request has been received successfully.</h1>
+    <p>Our team will review the submitted information and contact you for scheduling and technical confirmation.</p>
+    <div className="thermal-summary"><strong>{request.requestNumber}</strong><span>{request.inspectionType === "STANDARD" ? "Standard" : "Comprehensive"} inspection</span><span>{String(request.pvCapacityKwp)} kWp PV capacity</span><span>{request.institutionName}</span><span>Status: {request.status.replaceAll("_", " ")}</span><span>Submitted: {request.createdAt.toLocaleDateString("en-GB")}</span></div>
     <p>{request.emailSentAt ? "A PDF copy has been sent to your email." : "Your PDF confirmation is ready to download. Email delivery is not configured, but your request has been saved safely."}</p>
     <div className="thermal-actions"><a className="thermal-secondary-button" href={`/api/thermal-inspections/${request.requestNumber}/pdf`}><Download size={18}/> Download PDF</a>
       {request.askForPayment && request.calculatedFeeBdt && request.paymentStatus !== "PAID" ? <form action={`/api/thermal-inspections/${request.requestNumber}/pay`} method="post"><button className="thermal-primary-button" disabled={!sslCommerzEnabled()}><CreditCard size={18}/> Pay BDT {String(request.calculatedFeeBdt)}</button></form> : null}

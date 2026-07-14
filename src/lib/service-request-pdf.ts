@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
-import type { MappingServiceRequest, SparkleServiceRequest } from "@prisma/client";
+import type { MappingServiceRequest, SparkleServiceRequest, ThermalInspectionRequest } from "@prisma/client";
 
 type PdfTheme = {
   brandName: string;
@@ -15,11 +15,22 @@ type PdfTheme = {
   disclaimer: string;
 };
 
-type PdfField = { label: string; value?: string | null };
+type PdfField = { label: string; value?: string | null; stacked?: boolean };
 type PdfSection = { title: string; fields: PdfField[] };
 type ModuleDetail = { model?: string; capacityWp?: number; quantity?: number };
 
-const themes: Record<"sparkle" | "mapping", PdfTheme> = {
+const themes: Record<"sparkle" | "mapping" | "thermal", PdfTheme> = {
+  thermal: {
+    brandName: "Alektra Thermal",
+    title: "Alektra Thermal Service Request",
+    logoPath: "/brand/alektra-thermal-logo.png",
+    header: rgb(0.16, 0.07, 0.03),
+    accent: rgb(0.91, 0.36, 0.02),
+    soft: rgb(1, 0.97, 0.93),
+    text: rgb(0.16, 0.07, 0.03),
+    muted: rgb(0.49, 0.29, 0.18),
+    disclaimer: "This document confirms that a thermal inspection request has been submitted. Our team will review the information and contact you for scheduling and technical confirmation."
+  },
   sparkle: {
     brandName: "Alektra Sparkle",
     title: "Solar Panel Cleaning Service Request",
@@ -119,9 +130,9 @@ export async function generateMappingRequestPdf(request: MappingServiceRequest) 
         fields: [
           { label: "Service type", value: request.serviceType },
           { label: "Project/site type", value: request.projectSiteType },
-          { label: "Project area/site size", value: request.projectSize },
-          { label: "Requested mapping method", value: request.preferredMethod },
-          { label: "Required deliverables", value: deliverables.length ? deliverables.join(", ") : "Not provided" }
+          { label: "Project area/site size", value: request.projectSize, stacked: true },
+          { label: "Requested mapping method", value: request.preferredMethod, stacked: true },
+          { label: "Required deliverables", value: deliverables.length ? deliverables.join(", ") : "Not provided", stacked: true }
         ]
       },
       {
@@ -139,6 +150,71 @@ export async function generateMappingRequestPdf(request: MappingServiceRequest) 
       {
         title: "Additional notes",
         fields: [{ label: "Notes", value: request.additionalNotes || "Not provided" }]
+      }
+    ]
+  });
+}
+
+export async function generateThermalServiceRequestPdf(request: ThermalInspectionRequest) {
+  const modules = asArray<ModuleDetail>(request.moduleDetails);
+  const moduleLines = modules.map((module, index) => {
+    const capacityWp = Number(module.capacityWp ?? 0);
+    const quantity = Number(module.quantity ?? 0);
+    const capacityKwp = capacityWp && quantity ? ` | ${(capacityWp * quantity / 1000).toFixed(2)} kWp` : "";
+    return `${index + 1}. ${module.model || "PV module"} | ${capacityWp || "-"} Wp | ${quantity || "-"} modules${capacityKwp}`;
+  });
+  const location = request.projectFormattedAddress || request.projectLocation || request.manualAddressFallback || "Not provided";
+  const paymentFields: PdfField[] = request.askForPayment && request.calculatedFeeBdt
+    ? [
+      { label: request.paymentStatus === "PAID" ? "Payment receipt" : "Commercial quotation", value: `BDT ${Number(request.calculatedFeeBdt).toLocaleString("en-BD")}`, stacked: true },
+      { label: "Payment status", value: formatStatus(request.paymentStatus) },
+      { label: "Transaction reference", value: request.sslTransactionId }
+    ]
+    : [];
+
+  return generateServiceRequestPdf({
+    theme: themes.thermal,
+    requestNumber: request.requestNumber,
+    createdAt: request.createdAt,
+    sections: [
+      {
+        title: "Client and contact",
+        fields: [
+          { label: "Institution", value: request.institutionName },
+          { label: "Email", value: request.email },
+          { label: "Mobile", value: request.contactNumber },
+          { label: "Address", value: request.address, stacked: true },
+          { label: "Status", value: formatStatus(request.status) }
+        ]
+      },
+      {
+        title: "Thermal inspection scope",
+        fields: [
+          { label: "Inspection type", value: request.inspectionType === "STANDARD" ? "Standard" : "Comprehensive" },
+          { label: "PV capacity", value: `${request.pvCapacityKwp} kWp` },
+          { label: "AC capacity", value: `${request.acCapacityKw} kW` },
+          { label: "PV module details", value: moduleLines.join("\n") || "Not provided", stacked: true }
+        ]
+      },
+      {
+        title: "Project location",
+        fields: [
+          { label: "Project/site address", value: location, stacked: true },
+          { label: "Place name", value: request.projectLocationName },
+          { label: "Google Place ID", value: request.googlePlaceId },
+          { label: "Coordinates", value: request.latitude && request.longitude ? `${request.latitude}, ${request.longitude}` : null },
+          { label: "Google Maps", value: request.latitude && request.longitude ? `https://www.google.com/maps/search/?api=1&query=${request.latitude},${request.longitude}` : null, stacked: true },
+          { label: "Distance from base", value: request.distanceFromBaseKm ? `${Number(request.distanceFromBaseKm).toFixed(2)} km` : null },
+          { label: "Distance status", value: formatStatus(request.distanceCalculationStatus) }
+        ]
+      },
+      ...(paymentFields.length ? [{ title: request.paymentStatus === "PAID" ? "Payment receipt" : "Commercial quotation", fields: paymentFields }] : []),
+      {
+        title: "Additional notes",
+        fields: [
+          { label: "Notes", value: request.additionalNotes || "Not provided", stacked: true },
+          { label: "Minimum site size", value: "Minimum thermal inspection site size: 50 kWp." }
+        ]
       }
     ]
   });
@@ -186,8 +262,14 @@ async function generateServiceRequestPdf(input: {
     for (const field of section.fields) {
       if (!field.value) continue;
       ensureSpace(76);
+      const stacked = field.stacked || field.label.length > 21 || String(field.value).includes("\n");
       page.drawText(`${field.label}:`, { x: 52, y, size: 9.5, font: bold, color: input.theme.muted });
-      drawWrapped(String(field.value), 154, 388, 10, font, input.theme.text);
+      if (stacked) {
+        y -= 14;
+        drawWrapped(String(field.value), 62, 480, 10, font, input.theme.text);
+      } else {
+        drawWrapped(String(field.value), 174, 368, 10, font, input.theme.text);
+      }
       y -= 2;
     }
   }
