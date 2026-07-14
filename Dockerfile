@@ -37,14 +37,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/public/uploads ./.image-seed/uploads
-COPY --from=builder --chown=nextjs:nodejs /app/prisma/postgresql ./prisma/postgresql
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/docker ./scripts/docker
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/db/verify-prisma-client-provider.js ./scripts/db/verify-prisma-client-provider.js
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/next.config.mjs ./next.config.mjs
 
-RUN mkdir -p public/uploads storage/thermal logs \
-  && chown -R nextjs:nodejs public/uploads storage logs .image-seed
+RUN mkdir -p public/uploads storage/thermal logs backups/sqlite-export \
+  && chown -R nextjs:nodejs public/uploads storage logs backups .image-seed
 
 USER nextjs
 
