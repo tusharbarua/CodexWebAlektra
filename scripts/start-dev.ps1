@@ -7,16 +7,35 @@ $ErrorActionPreference = "Stop"
 $project = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $nodeDir = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin"
 $depsBin = "C:\Users\Dell\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin"
-$pnpmCmd = Join-Path $depsBin "pnpm.cmd"
 
 if (Test-Path (Join-Path $nodeDir "node.exe")) {
   $env:PATH = "$nodeDir;$env:PATH"
 }
 
-if (Test-Path $pnpmCmd) {
+$fallbackDepsBin = Join-Path $depsBin "fallback"
+if (Test-Path $depsBin) {
   $env:PATH = "$depsBin;$env:PATH"
-} else {
-  throw "pnpm.cmd was not found at $pnpmCmd"
+}
+if (Test-Path $fallbackDepsBin) {
+  $env:PATH = "$fallbackDepsBin;$env:PATH"
+}
+
+$pnpmCandidates = @(
+  (Join-Path $depsBin "pnpm.cmd"),
+  (Join-Path $fallbackDepsBin "pnpm.cmd"),
+  "C:\Program Files\nodejs\pnpm.cmd"
+)
+
+$pnpmCmd = $pnpmCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (!$pnpmCmd) {
+  $pnpmCommand = Get-Command pnpm -ErrorAction SilentlyContinue
+  if ($pnpmCommand) {
+    $pnpmCmd = $pnpmCommand.Source
+  }
+}
+
+if (!$pnpmCmd) {
+  throw "pnpm was not found. Install pnpm or run: corepack enable"
 }
 
 $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
