@@ -59,7 +59,7 @@ export default async function ThermalPage() {
         media={thermalHeroMedia}
         videoClassName="thermal-hero-video"
         imageClassName="thermal-hero-video"
-        fallbackVideoSrc="/videos/thermal-drone.mp4"
+        fallbackVideoSrc="/uploads/hero/thermal/thermal-hero-video.mp4"
         fallbackPosterImage={String(heroSettings.posterImage)}
       />
       <div className="thermal-hero-overlay" />
