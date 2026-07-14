@@ -1,4 +1,4 @@
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Download } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,10 @@ export default async function MappingRequestSuccess({ searchParams }: { searchPa
                 <span>Status: {row.status.replaceAll("_", " ")}</span>
               </div>
             ) : null}
-            <a className="mapping-primary-button" href="/mapping">Back to Alektra Mapping</a>
+            <div className="mapping-actions">
+              {row ? <a className="mapping-secondary-button" href={`/api/mapping-requests/${row.requestNumber}/pdf`}><Download size={18} /> Download PDF</a> : null}
+              <a className="mapping-primary-button" href="/mapping">Back to Alektra Mapping</a>
+            </div>
           </div>
         </div>
       </section>

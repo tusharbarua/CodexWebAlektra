@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Download } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,10 @@ export default async function SparkleRequestSuccess({ searchParams }: { searchPa
               </div>
             ) : <p>Your request has been received. Our team will contact you shortly.</p>}
             <p>Our team will review the rooftop cleaning requirement and contact you with the next steps.</p>
-            <Link className="sparkle-primary-button" href="/sparkle">Back to Alektra Sparkle</Link>
+            <div className="sparkle-actions">
+              {row ? <a className="sparkle-secondary-button" href={`/api/sparkle-requests/${row.requestNumber}/pdf`}><Download size={18} /> Download PDF</a> : null}
+              <Link className="sparkle-primary-button" href="/sparkle">Back to Alektra Sparkle</Link>
+            </div>
           </div>
         </div>
       </section>
