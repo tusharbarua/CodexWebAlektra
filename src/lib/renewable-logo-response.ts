@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-const fallbackLogoPath = path.join(process.cwd(), "public", "brand", "alektra-logo.svg");
+const fallbackLogoPath = path.join(process.cwd(), "public", "brand", "alektra-renewable-logo.png");
 
 function contentTypeFor(filePath: string) {
   const extension = path.extname(filePath).toLowerCase();
