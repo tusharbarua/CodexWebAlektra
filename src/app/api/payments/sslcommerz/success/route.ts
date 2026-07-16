@@ -26,5 +26,5 @@ export async function POST(request: Request) {
   });
   await sendOrderConfirmation(order);
 
-  return NextResponse.redirect(new URL(`/checkout/success?order=${transaction.order.orderNumber}`, request.url));
+  return NextResponse.redirect(new URL(`/checkout/success?order=${encodeURIComponent(order.orderNumber)}&token=${encodeURIComponent(order.accessToken ?? "")}`, request.url));
 }

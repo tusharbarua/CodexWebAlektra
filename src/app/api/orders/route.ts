@@ -7,6 +7,7 @@ import { initiateSslCommerz, sslCommerzEnabled } from "@/lib/sslcommerz";
 import { sendOrderNotifications } from "@/lib/notifications";
 import { getCustomerSession, createEmailVerificationToken, createRawToken, hashCustomerPassword } from "@/lib/customer-auth";
 import { sendCustomerAccountSetupEmail } from "@/lib/mail";
+import { createOrderAccessToken } from "@/lib/order-access";
 
 const optionalEmailSchema = z.preprocess(
   (value) => typeof value === "string" && !value.trim() ? undefined : value,
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
       : `${deliverySettings?.pickupLabel ?? "Pick up from our warehouse"} at ${deliverySettings?.pickupAddress ?? "Khulshi, Chattogram"}`;
     const total = Math.max(subtotal - discount + deliveryCharge, 0);
     const orderNumber = await nextOrderNumber();
+    const accessToken = createOrderAccessToken();
     const orderAddress = normalizeOrderAddress(body.address, body.deliveryMethod);
 
     const orderResult = await prisma.$transaction(async (tx) => {
@@ -165,6 +167,7 @@ export async function POST(request: Request) {
       const created = await tx.order.create({
         data: {
           orderNumber,
+          accessToken,
           customerId: checkoutCustomerId,
           customerName: body.customerName,
           customerEmail: body.customerEmail || null,
@@ -259,6 +262,8 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         orderNumber: order.orderNumber,
+        accessToken: order.accessToken,
+        successUrl: `/checkout/success?order=${encodeURIComponent(order.orderNumber)}&token=${encodeURIComponent(order.accessToken ?? "")}`,
         payment: "cod",
         accountSetup: orderResult.setupCustomer ? "sent" : orderResult.existingVerifiedAccount ? "existing_account" : "none"
       });
@@ -278,6 +283,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       orderNumber: order.orderNumber,
+      accessToken: order.accessToken,
       redirectUrl: payment.redirectUrl,
       accountSetup: orderResult.setupCustomer ? "sent" : orderResult.existingVerifiedAccount ? "existing_account" : "none"
     });

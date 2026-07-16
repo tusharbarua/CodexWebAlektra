@@ -455,7 +455,10 @@ export function CheckoutForm({
     }
     if (response.ok) {
       writeCart([]);
-      setMessage(`Order ${data.orderNumber} received.`);
+      const successUrl = data.successUrl || (data.orderNumber && data.accessToken
+        ? `/checkout/success?order=${encodeURIComponent(data.orderNumber)}&token=${encodeURIComponent(data.accessToken)}`
+        : "/checkout/success");
+      window.location.href = successUrl;
     } else {
       const serverErrors = data.fieldErrors ?? {};
       if (Object.keys(serverErrors).length) {

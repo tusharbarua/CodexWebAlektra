@@ -704,6 +704,7 @@ model NotificationLog {
 model Order {
   id                     String               @id @default(cuid())
   orderNumber            String               @unique
+  accessToken            String?              @unique
   userId                 String?
   customerId             String?
   customerName           String
