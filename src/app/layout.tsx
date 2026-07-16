@@ -13,6 +13,15 @@ export const metadata: Metadata = {
   },
   description:
     "Premium solar EPC, aerial thermal inspection, solar panel cleaning and mapping services for Bangladesh commercial and industrial clients.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico?v=20260717", sizes: "any", type: "image/x-icon" }
+    ],
+    shortcut: ["/favicon.ico?v=20260717"],
+    apple: [
+      { url: "/favicon.ico?v=20260717", type: "image/x-icon" }
+    ]
+  },
   openGraph: {
     title: "Alektra Renewable",
     description: "Solar EPC, thermal inspection, panel cleaning and mapping services.",
