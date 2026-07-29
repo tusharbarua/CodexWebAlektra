@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { PublicChrome } from "@/components/PublicChrome";
 import { getFooterLegalDocuments, getSiteMapGroups } from "@/lib/legal-documents";
 import { getFooterSettings } from "@/lib/site-settings";
@@ -42,6 +43,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en">
       <body suppressHydrationWarning>
+        {!isAdminRoute ? <GoogleAnalytics /> : null}
         <PublicChrome footerSettings={footerSettings} legalDocuments={legalDocuments} siteMapGroups={getSiteMapGroups()}>{children}</PublicChrome>
       </body>
     </html>
