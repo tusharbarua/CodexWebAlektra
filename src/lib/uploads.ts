@@ -30,6 +30,25 @@ export function getFiles(formData: FormData, fieldName: string) {
   });
 }
 
+export function getUploadRoot() {
+  const configured = process.env.UPLOAD_DIR?.trim();
+  if (!configured) return path.join(process.cwd(), "public", "uploads");
+  return path.isAbsolute(configured) ? configured : path.join(process.cwd(), configured);
+}
+
+export function resolvePublicUploadPath(urlPath: string) {
+  if (!urlPath.startsWith("/uploads/")) return null;
+  const parts = urlPath.split("/").filter(Boolean);
+  if (parts.length < 3 || parts.length > 4) return null;
+  const [, kind, maybeSubdir, maybeFileName] = parts;
+  const fileName = maybeFileName ?? maybeSubdir;
+  const subdir = maybeFileName ? maybeSubdir : "";
+  const resolved = path.resolve(getUploadRoot(), kind, subdir ? path.basename(subdir) : "", path.basename(fileName));
+  const root = path.resolve(getUploadRoot());
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) return null;
+  return resolved;
+}
+
 export async function saveUpload(
   file: File,
   options: {
@@ -58,7 +77,7 @@ export async function saveUpload(
     .replace(/^-+|-+$/g, "") || options.fallbackName;
   const fileName = `${baseName}-${randomUUID()}.${extension}`;
   const safeSubdir = options.subdir ? options.subdir.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "") : "";
-  const uploadDir = path.join(process.cwd(), "public", "uploads", options.kind, safeSubdir);
+  const uploadDir = path.join(getUploadRoot(), options.kind, safeSubdir);
   await mkdir(uploadDir, { recursive: true });
   await writeFile(path.join(uploadDir, fileName), Buffer.from(await file.arrayBuffer()));
   return {
@@ -70,14 +89,11 @@ export async function saveUpload(
 }
 
 export async function deletePublicUpload(url?: string | null) {
-  if (!url?.startsWith("/uploads/")) return;
-  const parts = url.split("/").filter(Boolean);
-  if (parts.length < 3 || parts.length > 4) return;
-  const [, kind, maybeSubdir, maybeFileName] = parts;
-  const fileName = maybeFileName ?? maybeSubdir;
-  const subdir = maybeFileName ? maybeSubdir : "";
+  if (!url) return;
+  const filePath = resolvePublicUploadPath(url);
+  if (!filePath) return;
   try {
-    await unlink(path.join(process.cwd(), "public", "uploads", kind, subdir ? path.basename(subdir) : "", path.basename(fileName)));
+    await unlink(filePath);
   } catch {
     // Missing files should not block admin edits.
   }

@@ -67,13 +67,13 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
           coverImage: true,
           images: {
             orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-            take: 1,
+            take: 6,
             select: { imagePath: true }
           }
         }
       })
     : [];
-  const projectImageById = new Map(sourceProjects.map((project) => [project.id, project.images[0]?.imagePath ?? project.coverImage ?? null]));
+  const projectImagesById = new Map(sourceProjects.map((project) => [project.id, uniqueImageSources([project.coverImage, ...project.images.map((image) => image.imagePath)])]));
   const [featured, ...gridArticles] = articles;
 
   return (
@@ -122,7 +122,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
           <div className="container">
             <p className="resources-kicker">Featured Insight</p>
             <Link className="resources-featured-card resources-glass-card" href={`/resources/${featured.slug}`}>
-              <ResourceImage article={featured} className="resources-featured-image" fallbackImageSrc={featured.sourceProjectId ? projectImageById.get(featured.sourceProjectId) : null} />
+              <ResourceImage article={featured} className="resources-featured-image" fallbackImageSrcs={featured.sourceProjectId ? projectImagesById.get(featured.sourceProjectId) : undefined} />
               <div className="resources-featured-copy">
                 <span className="resources-badge">{featured.category.name}</span>
                 <h2>{featured.title}</h2>
@@ -151,7 +151,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
             <>
               <div className="resources-card-grid">
                 {(featured ? gridArticles : articles).map((article) => (
-                  <ResourceCard article={article} fallbackImageSrc={article.sourceProjectId ? projectImageById.get(article.sourceProjectId) : null} key={article.id} />
+                  <ResourceCard article={article} fallbackImageSrcs={article.sourceProjectId ? projectImagesById.get(article.sourceProjectId) : undefined} key={article.id} />
                 ))}
               </div>
               {hasMore ? (
@@ -199,10 +199,10 @@ type ArticleWithCategory = {
   category: { name: string; slug: string };
 };
 
-function ResourceCard({ article, fallbackImageSrc }: { article: ArticleWithCategory; fallbackImageSrc?: string | null }) {
+function ResourceCard({ article, fallbackImageSrcs }: { article: ArticleWithCategory; fallbackImageSrcs?: string[] }) {
   return (
     <Link className="resource-card resources-glass-card" href={`/resources/${article.slug}`}>
-      <ResourceImage article={article} className="resource-card-image" fallbackImageSrc={fallbackImageSrc} />
+      <ResourceImage article={article} className="resource-card-image" fallbackImageSrcs={fallbackImageSrcs} />
       <div className="resource-card-body">
         <span className="resources-badge">{article.category.name}</span>
         <h3>{article.title}</h3>
@@ -220,21 +220,25 @@ function ResourceCard({ article, fallbackImageSrc }: { article: ArticleWithCateg
 function ResourceImage({
   article,
   className,
-  fallbackImageSrc
+  fallbackImageSrcs
 }: {
   article: { coverImage?: string | null; coverImageAlt?: string | null; title: string };
   className: string;
-  fallbackImageSrc?: string | null;
+  fallbackImageSrcs?: string[];
 }) {
   return (
     <SafePublicImage
-      src={article.coverImage || fallbackImageSrc}
-      fallbackSrc={fallbackImageSrc}
+      src={article.coverImage || fallbackImageSrcs?.[0]}
+      fallbackSrcs={fallbackImageSrcs}
       className={className}
       alt={article.coverImageAlt || article.title}
       fallbackStyle={{ background: resourceFallbackImage }}
     />
   );
+}
+
+function uniqueImageSources(values: Array<string | null | undefined>) {
+  return values.filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
 }
 
 function formatDate(value: Date) {

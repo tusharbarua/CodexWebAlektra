@@ -8,6 +8,7 @@ import { useState } from "react";
 export function SafePublicImage({
   src,
   fallbackSrc,
+  fallbackSrcs,
   alt,
   className,
   fallbackClassName = "resources-image-placeholder",
@@ -16,16 +17,20 @@ export function SafePublicImage({
 }: {
   src?: string | null;
   fallbackSrc?: string | null;
+  fallbackSrcs?: Array<string | null | undefined>;
   alt: string;
   className: string;
   fallbackClassName?: string;
   fallbackStyle?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
-  const [failedPrimary, setFailedPrimary] = useState(false);
-  const [failedFallback, setFailedFallback] = useState(false);
-  const imageSrc = failedPrimary && fallbackSrc && fallbackSrc !== src && !failedFallback ? fallbackSrc : src;
-  const showPlaceholder = !imageSrc || (failedPrimary && (!fallbackSrc || fallbackSrc === src || failedFallback));
+  const candidates = [src, fallbackSrc, ...(fallbackSrcs ?? [])].filter((item, index, array): item is string => {
+    return Boolean(item) && array.indexOf(item) === index;
+  });
+  const [failedIndexes, setFailedIndexes] = useState<number[]>([]);
+  const activeIndex = candidates.findIndex((_, index) => !failedIndexes.includes(index));
+  const imageSrc = activeIndex >= 0 ? candidates[activeIndex] : null;
+  const showPlaceholder = !imageSrc;
 
   if (showPlaceholder) {
     return (
@@ -43,8 +48,7 @@ export function SafePublicImage({
         loading="lazy"
         decoding="async"
         onError={() => {
-          if (imageSrc === fallbackSrc) setFailedFallback(true);
-          else setFailedPrimary(true);
+          setFailedIndexes((indexes) => indexes.includes(activeIndex) ? indexes : [...indexes, activeIndex]);
         }}
       />
     </div>

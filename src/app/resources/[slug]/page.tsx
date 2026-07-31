@@ -25,13 +25,14 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
           coverImage: true,
           images: {
             orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-            take: 1,
+            take: 6,
             select: { imagePath: true }
           }
         }
       })
     : null;
-  const articleImage = article.coverImage || sourceProject?.images[0]?.imagePath || sourceProject?.coverImage || null;
+  const articleFallbackImages = uniqueImageSources([sourceProject?.coverImage, ...(sourceProject?.images.map((image) => image.imagePath) ?? [])]);
+  const articleImage = article.coverImage || articleFallbackImages[0] || null;
 
   const related = await prisma.resourceArticle.findMany({
     where: {
@@ -52,13 +53,13 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
           coverImage: true,
           images: {
             orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
-            take: 1,
+            take: 6,
             select: { imagePath: true }
           }
         }
       })
     : [];
-  const relatedProjectImageById = new Map(relatedProjects.map((project) => [project.id, project.images[0]?.imagePath || project.coverImage || null]));
+  const relatedProjectImagesById = new Map(relatedProjects.map((project) => [project.id, uniqueImageSources([project.coverImage, ...project.images.map((image) => image.imagePath)])]));
 
   return (
     <main className="resources-page resource-detail-page">
@@ -78,7 +79,7 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
             </div>
             <SafePublicImage
               src={article.coverImage || articleImage}
-              fallbackSrc={sourceProject?.images[0]?.imagePath || sourceProject?.coverImage || null}
+              fallbackSrcs={articleFallbackImages}
               className="resource-article-cover"
               alt={article.coverImageAlt || article.title}
               fallbackStyle={{ background: fallbackImage }}
@@ -103,8 +104,8 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
               {related.map((item) => (
                 <Link className="resource-card resources-glass-card" href={`/resources/${item.slug}`} key={item.id}>
                   <SafePublicImage
-                    src={item.coverImage || (item.sourceProjectId ? relatedProjectImageById.get(item.sourceProjectId) : null)}
-                    fallbackSrc={item.sourceProjectId ? relatedProjectImageById.get(item.sourceProjectId) : null}
+                    src={item.coverImage || (item.sourceProjectId ? relatedProjectImagesById.get(item.sourceProjectId)?.[0] : null)}
+                    fallbackSrcs={item.sourceProjectId ? relatedProjectImagesById.get(item.sourceProjectId) : undefined}
                     className="resource-card-image"
                     alt={item.coverImageAlt || item.title}
                     fallbackStyle={{ background: fallbackImage }}
@@ -131,4 +132,8 @@ function formatDate(value: Date) {
 
 function estimateReadTime(body: string) {
   return Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 180));
+}
+
+function uniqueImageSources(values: Array<string | null | undefined>) {
+  return values.filter((value, index, array): value is string => Boolean(value) && array.indexOf(value) === index);
 }

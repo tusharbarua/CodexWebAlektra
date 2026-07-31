@@ -20,6 +20,12 @@ function ensureDirectory(relativePath) {
   fs.mkdirSync(path.join(appRoot, relativePath), { recursive: true });
 }
 
+function uploadRoot() {
+  const configured = process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim();
+  if (!configured) return path.join(appRoot, "public", "uploads");
+  return path.isAbsolute(configured) ? configured : path.join(appRoot, configured);
+}
+
 function copySeedFiles(seedRelativePath, targetRelativePath) {
   const source = path.join(appRoot, seedRelativePath);
   const target = path.join(appRoot, targetRelativePath);
@@ -42,7 +48,11 @@ function generatedClientProvider() {
 ensureDirectory("public/uploads");
 ensureDirectory("storage");
 ensureDirectory("storage/thermal");
+fs.mkdirSync(uploadRoot(), { recursive: true });
 copySeedFiles(".image-seed/uploads", "public/uploads");
+if (path.resolve(uploadRoot()) !== path.resolve(appRoot, "public", "uploads")) {
+  copySeedFiles(".image-seed/uploads", path.relative(appRoot, uploadRoot()));
+}
 
 const provider = generatedClientProvider();
 if (provider && provider !== "postgresql") {
