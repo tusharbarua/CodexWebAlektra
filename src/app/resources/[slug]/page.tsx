@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublishStatus } from "@prisma/client";
 import { ArrowLeft, ArrowRight, Clock3, UserRound } from "lucide-react";
+import { SafePublicImage } from "@/components/SafePublicImage";
 import { MarkdownBlock } from "@/lib/page-cms";
 import { prisma } from "@/lib/prisma";
 
@@ -17,6 +18,20 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
     include: { category: true, author: true }
   });
   if (!article) notFound();
+  const sourceProject = article.sourceProjectId
+    ? await prisma.project.findUnique({
+        where: { id: article.sourceProjectId },
+        select: {
+          coverImage: true,
+          images: {
+            orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+            take: 1,
+            select: { imagePath: true }
+          }
+        }
+      })
+    : null;
+  const articleImage = article.coverImage || sourceProject?.images[0]?.imagePath || sourceProject?.coverImage || null;
 
   const related = await prisma.resourceArticle.findMany({
     where: {
@@ -28,6 +43,22 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
     orderBy: [{ isFeatured: "desc" }, { publishedAt: "desc" }, { createdAt: "desc" }],
     take: 3
   });
+  const relatedProjectIds = related.map((item) => item.sourceProjectId).filter((id): id is string => Boolean(id));
+  const relatedProjects = relatedProjectIds.length
+    ? await prisma.project.findMany({
+        where: { id: { in: relatedProjectIds } },
+        select: {
+          id: true,
+          coverImage: true,
+          images: {
+            orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+            take: 1,
+            select: { imagePath: true }
+          }
+        }
+      })
+    : [];
+  const relatedProjectImageById = new Map(relatedProjects.map((project) => [project.id, project.images[0]?.imagePath || project.coverImage || null]));
 
   return (
     <main className="resources-page resource-detail-page">
@@ -45,11 +76,12 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
                 <span><UserRound size={14} /> {article.author?.name || "Alektra Renewable"}</span>
               </div>
             </div>
-            <div
-              className={`resource-article-cover ${article.coverImage ? "" : "resources-image-placeholder"}`}
-              style={article.coverImage ? { backgroundImage: `url(${article.coverImage})` } : { background: fallbackImage }}
-              role="img"
-              aria-label={article.coverImageAlt || article.title}
+            <SafePublicImage
+              src={article.coverImage || articleImage}
+              fallbackSrc={sourceProject?.images[0]?.imagePath || sourceProject?.coverImage || null}
+              className="resource-article-cover"
+              alt={article.coverImageAlt || article.title}
+              fallbackStyle={{ background: fallbackImage }}
             />
             <div className="resource-article-body">
               <MarkdownBlock value={article.body} />
@@ -70,11 +102,12 @@ export default async function ResourceArticlePage({ params }: { params: Promise<
             <div className="resources-card-grid related">
               {related.map((item) => (
                 <Link className="resource-card resources-glass-card" href={`/resources/${item.slug}`} key={item.id}>
-                  <div
-                    className={`resource-card-image ${item.coverImage ? "" : "resources-image-placeholder"}`}
-                    style={item.coverImage ? { backgroundImage: `url(${item.coverImage})` } : { background: fallbackImage }}
-                    role="img"
-                    aria-label={item.coverImageAlt || item.title}
+                  <SafePublicImage
+                    src={item.coverImage || (item.sourceProjectId ? relatedProjectImageById.get(item.sourceProjectId) : null)}
+                    fallbackSrc={item.sourceProjectId ? relatedProjectImageById.get(item.sourceProjectId) : null}
+                    className="resource-card-image"
+                    alt={item.coverImageAlt || item.title}
+                    fallbackStyle={{ background: fallbackImage }}
                   />
                   <div className="resource-card-body">
                     <span className="resources-badge">{item.category.name}</span>

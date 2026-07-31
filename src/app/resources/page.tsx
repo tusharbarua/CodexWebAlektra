@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PublishStatus } from "@prisma/client";
 import { ArrowRight, BookOpen, Clock3, Search, Sparkles } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { SafePublicImage } from "@/components/SafePublicImage";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
         excerpt: true,
         coverImage: true,
         coverImageAlt: true,
+        sourceProjectId: true,
         publishedAt: true,
         createdAt: true,
         readTimeMinutes: true,
@@ -56,6 +58,22 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
   ]);
   const hasMore = articlesResult.length > visibleCount;
   const articles = articlesResult.slice(0, visibleCount);
+  const sourceProjectIds = articles.map((article) => article.sourceProjectId).filter((id): id is string => Boolean(id));
+  const sourceProjects = sourceProjectIds.length
+    ? await prisma.project.findMany({
+        where: { id: { in: sourceProjectIds } },
+        select: {
+          id: true,
+          coverImage: true,
+          images: {
+            orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }],
+            take: 1,
+            select: { imagePath: true }
+          }
+        }
+      })
+    : [];
+  const projectImageById = new Map(sourceProjects.map((project) => [project.id, project.images[0]?.imagePath ?? project.coverImage ?? null]));
   const [featured, ...gridArticles] = articles;
 
   return (
@@ -104,7 +122,7 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
           <div className="container">
             <p className="resources-kicker">Featured Insight</p>
             <Link className="resources-featured-card resources-glass-card" href={`/resources/${featured.slug}`}>
-              <ResourceImage article={featured} className="resources-featured-image" />
+              <ResourceImage article={featured} className="resources-featured-image" fallbackImageSrc={featured.sourceProjectId ? projectImageById.get(featured.sourceProjectId) : null} />
               <div className="resources-featured-copy">
                 <span className="resources-badge">{featured.category.name}</span>
                 <h2>{featured.title}</h2>
@@ -132,7 +150,9 @@ export default async function ResourcesPage({ searchParams }: { searchParams: Pr
           {articles.length ? (
             <>
               <div className="resources-card-grid">
-                {(featured ? gridArticles : articles).map((article) => <ResourceCard article={article} key={article.id} />)}
+                {(featured ? gridArticles : articles).map((article) => (
+                  <ResourceCard article={article} fallbackImageSrc={article.sourceProjectId ? projectImageById.get(article.sourceProjectId) : null} key={article.id} />
+                ))}
               </div>
               {hasMore ? (
                 <div className="resources-load-more-wrap">
@@ -171,6 +191,7 @@ type ArticleWithCategory = {
   excerpt: string;
   coverImage: string | null;
   coverImageAlt: string | null;
+  sourceProjectId: string | null;
   publishedAt: Date | null;
   createdAt: Date;
   readTimeMinutes: number | null;
@@ -178,10 +199,10 @@ type ArticleWithCategory = {
   category: { name: string; slug: string };
 };
 
-function ResourceCard({ article }: { article: ArticleWithCategory }) {
+function ResourceCard({ article, fallbackImageSrc }: { article: ArticleWithCategory; fallbackImageSrc?: string | null }) {
   return (
     <Link className="resource-card resources-glass-card" href={`/resources/${article.slug}`}>
-      <ResourceImage article={article} className="resource-card-image" />
+      <ResourceImage article={article} className="resource-card-image" fallbackImageSrc={fallbackImageSrc} />
       <div className="resource-card-body">
         <span className="resources-badge">{article.category.name}</span>
         <h3>{article.title}</h3>
@@ -196,9 +217,24 @@ function ResourceCard({ article }: { article: ArticleWithCategory }) {
   );
 }
 
-function ResourceImage({ article, className }: { article: { coverImage?: string | null; coverImageAlt?: string | null; title: string }; className: string }) {
-  if (!article.coverImage) return <div className={`${className} resources-image-placeholder`} style={{ background: resourceFallbackImage }} aria-label={article.title} />;
-  return <div className={className} style={{ backgroundImage: `url(${article.coverImage})` }} role="img" aria-label={article.coverImageAlt || article.title} />;
+function ResourceImage({
+  article,
+  className,
+  fallbackImageSrc
+}: {
+  article: { coverImage?: string | null; coverImageAlt?: string | null; title: string };
+  className: string;
+  fallbackImageSrc?: string | null;
+}) {
+  return (
+    <SafePublicImage
+      src={article.coverImage || fallbackImageSrc}
+      fallbackSrc={fallbackImageSrc}
+      className={className}
+      alt={article.coverImageAlt || article.title}
+      fallbackStyle={{ background: resourceFallbackImage }}
+    />
+  );
 }
 
 function formatDate(value: Date) {

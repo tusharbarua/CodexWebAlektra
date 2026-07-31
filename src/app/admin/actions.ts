@@ -13,6 +13,7 @@ import { getDatasetStats, searchBangladeshLocation } from "@/lib/bangladesh-loca
 import { sendCustomerVerificationEmail, sendOrderConfirmationEmail, testSmtpConnection } from "@/lib/mail";
 import { legalDefaults } from "@/lib/legal-documents";
 import { createEmailVerificationToken } from "@/lib/customer-auth";
+import { sanitizeRichHtml } from "@/lib/safe-html";
 
 async function requireAdmin() {
   const session = await auth();
@@ -81,6 +82,7 @@ function slugifyProject(value: string) {
 
 function articleExcerpt(value: string) {
   const plain = value
+    .replace(/<[^>]+>/g, " ")
     .replace(/[#*_`>~\-[\]()]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -380,7 +382,8 @@ export async function deleteResourceCategory(formData: FormData) {
 
 export async function saveResource(formData: FormData) {
   const user = await requireAdmin();
-  const data = z.object({
+  const resourceId = optional(formData.get("id")) ?? undefined;
+  const parsed = z.object({
     id: z.string().optional(),
     title: z.string().min(3),
     slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
@@ -394,13 +397,13 @@ export async function saveResource(formData: FormData) {
     isFeatured: z.boolean().default(false),
     readTimeMinutes: z.coerce.number().int().positive().optional(),
     status: z.nativeEnum(PublishStatus)
-  }).parse({
-    id: optional(formData.get("id")) ?? undefined,
+  }).safeParse({
+    id: resourceId,
     title: text(formData.get("title")),
     slug: text(formData.get("slug")),
     categoryId: text(formData.get("categoryId")),
     excerpt: text(formData.get("excerpt")),
-    body: text(formData.get("body")),
+    body: sanitizeRichHtml(String(formData.get("body") ?? "")),
     coverImage: text(formData.get("coverImage")),
     coverImageAlt: text(formData.get("coverImageAlt")),
     seoTitle: text(formData.get("seoTitle")),
@@ -409,6 +412,10 @@ export async function saveResource(formData: FormData) {
     readTimeMinutes: text(formData.get("readTimeMinutes")) || undefined,
     status: status(formData.get("status"))
   });
+  if (!parsed.success) {
+    redirect(`/admin/resources?error=${encodeURIComponent("Could not save resource article. Please check the highlighted fields.")}${resourceId ? `&edit=${resourceId}` : ""}`);
+  }
+  const data = parsed.data;
   const existing = data.id ? await prisma.resourceArticle.findUnique({ where: { id: data.id } }) : null;
   const imageFile = getFiles(formData, "coverImageFile")[0];
   let coverImage = data.coverImage || existing?.coverImage || null;
@@ -419,7 +426,7 @@ export async function saveResource(formData: FormData) {
       coverImage = saved.url;
     }
   } catch (error) {
-    redirect(`/admin/resources?error=${encodeURIComponent(error instanceof Error ? error.message : "Resource image upload failed.")}${data.id ? `&edit=${data.id}` : ""}`);
+    redirect(`/admin/resources?error=${encodeURIComponent(error instanceof Error ? error.message : "Image upload failed. Please try again.")}${data.id ? `&edit=${data.id}` : ""}`);
   }
 
   if (formData.get("deleteCoverImage") === "on") {
@@ -442,11 +449,12 @@ export async function saveResource(formData: FormData) {
     ? await prisma.resourceArticle.update({ where: { id: data.id }, data: articleData })
     : await prisma.resourceArticle.create({ data: articleData });
   refresh("/", "/resources", `/resources/${article.slug}`, "/admin/resources");
-  redirect("/admin/resources");
+  const saveState = `${data.id ? "updated" : "created"}-${data.status === PublishStatus.PUBLISHED ? "published" : "draft"}${imageFile ? "-image" : ""}`;
+  redirect(`/admin/resources?saved=${saveState}`);
 }
 
 function estimateReadTime(body: string) {
-  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  const words = body.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length;
   return Math.max(1, Math.ceil(words / 180));
 }
 
@@ -493,7 +501,7 @@ export async function saveProject(formData: FormData) {
     commissionedAt: text(formData.get("commissionedAt")),
     coverImage: text(formData.get("coverImage")),
     summary: text(formData.get("summary")),
-    fullCaseStudy: text(formData.get("fullCaseStudy")),
+    fullCaseStudy: sanitizeRichHtml(String(formData.get("fullCaseStudy") ?? "")),
     inverterBrandModel: text(formData.get("inverterBrandModel")),
     moduleBrandModel: text(formData.get("moduleBrandModel")),
     videoUrl: text(formData.get("videoUrl")),
@@ -585,7 +593,7 @@ export async function saveProject(formData: FormData) {
         }
       });
     } catch (error) {
-      redirect(`/admin/projects?error=${encodeURIComponent(error instanceof Error ? error.message : "Project image upload failed.")}&edit=${project.id}`);
+      redirect(`/admin/projects?error=${encodeURIComponent(error instanceof Error ? error.message : "Image upload failed. Please try again.")}&edit=${project.id}`);
     }
   }
 
@@ -611,7 +619,8 @@ export async function saveProject(formData: FormData) {
     authorId: user.id
   });
   refresh("/", "/resources", "/admin/projects", "/admin/resources");
-  redirect("/admin/projects");
+  const saveState = `${data.id ? "updated" : "created"}-${data.status === PublishStatus.PUBLISHED ? "published" : "draft"}${uploadedFiles.length ? "-image" : ""}`;
+  redirect(`/admin/projects?saved=${saveState}`);
 }
 
 async function syncProjectCaseStudyArticle({

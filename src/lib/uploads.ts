@@ -41,6 +41,8 @@ export async function saveUpload(
   }
 ): Promise<SavedUpload> {
   if (!options.allowedTypes.has(file.type)) {
+    const allowed = Array.from(options.allowedTypes);
+    if (allowed.every((type) => type.startsWith("image/"))) throw new Error("Please upload a valid image file.");
     throw new Error("This file type is not allowed.");
   }
   if (file.size > options.maxBytes) {

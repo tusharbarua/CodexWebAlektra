@@ -1,5 +1,6 @@
 import { PageKey, PublishStatus, type Page, type PageSection, type PageSectionItem } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { looksLikeHtml, sanitizeRichHtml } from "@/lib/safe-html";
 
 export type CmsSection = PageSection & { items: PageSectionItem[] };
 export type CmsPage = Page & { sections: CmsSection[] };
@@ -63,6 +64,9 @@ function inlineMarkdown(value: string) {
 }
 
 export function MarkdownBlock({ value }: { value?: string | null }) {
+  if (looksLikeHtml(value)) {
+    return <div className="rich-content" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(value) }} />;
+  }
   const blocks = String(value ?? "").split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
   return (
     <>
@@ -81,4 +85,3 @@ export function MarkdownBlock({ value }: { value?: string | null }) {
     </>
   );
 }
-
