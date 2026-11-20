@@ -27,8 +27,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) notFound();
     const extension = filePath.split(".").pop()?.toLowerCase() ?? "";
-    if (/^hero\/epc\/homepage-hero-[0-9a-f-]{36}\.(mp4|webm)$/.test(safePath)) {
-      return serveEpcVideo(request, filePath, fileStat.size, contentTypes[extension]);
+    if (/^hero\/(?:epc\/homepage-hero|(?:thermal|sparkle|mapping)\/page-hero)-[0-9a-f-]{36}\.(mp4|webm)$/.test(safePath)) {
+      return serveHeroVideo(request, filePath, fileStat.size, contentTypes[extension]);
     }
     const stream = Readable.toWeb(createReadStream(filePath)) as ReadableStream;
     return new Response(stream, {
@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
   }
 }
 
-function serveEpcVideo(request: Request, file: string, size: number, type: string) {
+function serveHeroVideo(request: Request, file: string, size: number, type: string) {
   const headers = new Headers({
     "Accept-Ranges": "bytes", "Content-Type": type, "Cache-Control": "public, max-age=31536000, immutable"
   });

@@ -111,7 +111,7 @@ export async function saveUpload(
   };
 }
 
-function hasImageSignature(bytes: Buffer, mimeType: string) {
+export function hasImageSignature(bytes: Buffer, mimeType: string) {
   if (mimeType === "image/jpeg") return bytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
   if (mimeType === "image/png") return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   return bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
