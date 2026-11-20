@@ -89,22 +89,22 @@ function articleExcerpt(value: string) {
   return plain.length > 220 ? `${plain.slice(0, 217).trim()}...` : plain;
 }
 
-async function uniqueResourceSlug(baseValue: string, existingArticleId?: string) {
+async function uniqueResourceSlug(db: Prisma.TransactionClient, baseValue: string, existingArticleId?: string) {
   const base = slugifyProject(baseValue);
   let slug = base;
   let suffix = 2;
   while (true) {
-    const existing = await prisma.resourceArticle.findUnique({ where: { slug }, select: { id: true } });
+    const existing = await db.resourceArticle.findUnique({ where: { slug }, select: { id: true } });
     if (!existing || existing.id === existingArticleId) return slug;
     slug = `${base}-${suffix}`;
     suffix += 1;
   }
 }
 
-async function getProjectCaseStudyCategoryId() {
-  const existing = await prisma.resourceCategory.findUnique({ where: { slug: "project-case-study" } });
+async function getProjectCaseStudyCategoryId(db: Prisma.TransactionClient) {
+  const existing = await db.resourceCategory.findUnique({ where: { slug: "project-case-study" } });
   if (existing) return existing.id;
-  const created = await prisma.resourceCategory.create({
+  const created = await db.resourceCategory.create({
     data: {
       name: "Project Case Study",
       slug: "project-case-study",
@@ -417,22 +417,19 @@ export async function saveResource(formData: FormData) {
   }
   const data = parsed.data;
   const existing = data.id ? await prisma.resourceArticle.findUnique({ where: { id: data.id } }) : null;
-  const imageFile = getFiles(formData, "coverImageFile")[0];
+  const removeCover = formData.get("deleteCoverImage") === "on";
+  const imageFile = removeCover ? undefined : getFiles(formData, "coverImageFile")[0];
   let coverImage = data.coverImage || existing?.coverImage || null;
   try {
     if (imageFile) {
       const saved = await saveUpload(imageFile, { kind: "resources", fallbackName: "resource", ...uploadRules.adminImage });
-      if (existing?.coverImage) await deletePublicUpload(existing.coverImage);
       coverImage = saved.url;
     }
   } catch (error) {
     redirect(`/admin/resources?error=${encodeURIComponent(error instanceof Error ? error.message : "Image upload failed. Please try again.")}${data.id ? `&edit=${data.id}` : ""}`);
   }
 
-  if (formData.get("deleteCoverImage") === "on") {
-    if (existing?.coverImage) await deletePublicUpload(existing.coverImage);
-    coverImage = null;
-  }
+  if (removeCover) coverImage = null;
 
   const articleData = {
     ...data,
@@ -525,105 +522,100 @@ export async function saveProject(formData: FormData) {
   if (data.featureOnResources && data.fullCaseStudy.trim().length < 20) {
     projectError("Case Study is required to feature this project on Resources.", data.id);
   }
-  const existingImages = data.id
-    ? await prisma.projectImage.findMany({ where: { projectId: data.id }, orderBy: { sortOrder: "asc" } })
-    : [];
-  const deletedIds = new Set(formData.getAll("deleteProjectImageId").map(String));
-  const keptImages = existingImages.filter((image) => !deletedIds.has(image.id));
   const uploadedFiles = getFiles(formData, "projectImages");
-  for (const file of uploadedFiles) {
-    if (!uploadRules.adminImage.allowedTypes.has(file.type)) redirect(`/admin/projects?error=${encodeURIComponent("Only JPG, JPEG, PNG and WebP project images are allowed.")}${data.id ? `&edit=${data.id}` : ""}`);
-    if (file.size > uploadRules.adminImage.maxBytes) redirect(`/admin/projects?error=${encodeURIComponent("Each project image must be 3 MB or smaller.")}${data.id ? `&edit=${data.id}` : ""}`);
-  }
-
-  const projectData = {
-    ...data,
-    id: undefined,
-    clientName: data.clientName || null,
-    commissionedAt: data.commissionedAt ? new Date(data.commissionedAt) : null,
-    coverImage: data.coverImage || keptImages.find((image) => image.isPrimary)?.imagePath || keptImages[0]?.imagePath || null,
-    inverterBrandModel: data.inverterBrandModel || null,
-    moduleBrandModel: data.moduleBrandModel || null,
-    videoUrl: data.videoUrl || null,
-    imageUrls: lines(formData.get("imageUrls"))
-  };
-  let project = await (async () => {
-    try {
-      return data.id
-      ? await prisma.project.update({ where: { id: data.id }, data: projectData })
-      : await prisma.project.create({ data: projectData });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        projectError("A project with this slug already exists. Please choose a different slug.", data.id);
-      }
-      throw error;
-    }
-  })();
-
-  const imagesToDelete = existingImages.filter((image) => deletedIds.has(image.id));
-  if (imagesToDelete.length) {
-    await prisma.projectImage.deleteMany({ where: { id: { in: imagesToDelete.map((image) => image.id) } } });
-    await Promise.all(imagesToDelete.map((image) => deletePublicUpload(image.imagePath)));
-  }
-
-  const primaryImage = text(formData.get("primaryProjectImage"));
-  await Promise.all(
-    keptImages.map((image) =>
-      prisma.projectImage.update({
-        where: { id: image.id },
-        data: {
-          altText: text(formData.get(`projectImageAlt_${image.id}`)) || project.title,
-          sortOrder: Number(text(formData.get(`projectImageSort_${image.id}`)) || image.sortOrder),
-          isPrimary: primaryImage === image.id
-        }
-      })
-    )
-  );
-
-  for (const [index, file] of uploadedFiles.entries()) {
-    try {
+  const stagedImages: string[] = [];
+  try {
+    for (const file of uploadedFiles) {
       const saved = await saveUpload(file, { kind: "projects", fallbackName: "project", ...uploadRules.adminImage });
-      await prisma.projectImage.create({
-        data: {
-          projectId: project.id,
-          imagePath: saved.url,
-          altText: project.title,
-          sortOrder: keptImages.length + index,
-          isPrimary: primaryImage === `new-project-${index}` || (!primaryImage && keptImages.length === 0 && index === 0)
-        }
-      });
-    } catch (error) {
-      redirect(`/admin/projects?error=${encodeURIComponent(error instanceof Error ? error.message : "Image upload failed. Please try again.")}&edit=${project.id}`);
+      stagedImages.push(saved.url);
     }
+  } catch (error) {
+    await Promise.all(stagedImages.map(deletePublicUpload));
+    projectError(error instanceof Error ? error.message : "Image upload failed. Please try again.", data.id);
   }
 
-  const finalImages = await prisma.projectImage.findMany({ where: { projectId: project.id }, orderBy: { sortOrder: "asc" } });
-  const primary = finalImages.find((image) => image.isPrimary) ?? finalImages[0];
-  if (primary) {
-    if (!primary.isPrimary) await prisma.projectImage.update({ where: { id: primary.id }, data: { isPrimary: true } });
-    project = await prisma.project.update({ where: { id: project.id }, data: { coverImage: primary.imagePath } });
+  const requestedPrimary = text(formData.get("primaryProjectImage"));
+  const deletedIds = new Set(formData.getAll("deleteProjectImageId").map(String));
+  let articleSlug: string | undefined;
+  try {
+    articleSlug = await prisma.$transaction(async (db) => {
+      const existingImages = data.id
+        ? await db.projectImage.findMany({ where: { projectId: data.id }, orderBy: { sortOrder: "asc" } })
+        : [];
+      const removed = existingImages.filter((image) => deletedIds.has(image.id));
+      const remaining = existingImages.filter((image) => !deletedIds.has(image.id));
+      const gallery = [
+        ...remaining.map((image) => ({
+          id: image.id,
+          key: image.id,
+          imagePath: image.imagePath,
+          altText: text(formData.get(`projectImageAlt_${image.id}`)) || data.title,
+          sortOrder: Number(text(formData.get(`projectImageSort_${image.id}`)) || image.sortOrder)
+        })),
+        ...stagedImages.map((imagePath, index) => ({
+          id: null,
+          key: `new-project-${index}`,
+          imagePath,
+          altText: data.title,
+          sortOrder: remaining.length + index
+        }))
+      ].sort((a, b) => a.sortOrder - b.sortOrder);
+      const primary = gallery.find((image) => image.key === requestedPrimary) ?? gallery[0];
+      const cover = removed.some((image) => image.imagePath === data.coverImage) ? null : data.coverImage || null;
+      const projectData = {
+        ...data,
+        id: undefined,
+        clientName: data.clientName || null,
+        commissionedAt: data.commissionedAt ? new Date(data.commissionedAt) : null,
+        coverImage: primary?.imagePath ?? cover,
+        inverterBrandModel: data.inverterBrandModel || null,
+        moduleBrandModel: data.moduleBrandModel || null,
+        videoUrl: data.videoUrl || null,
+        imageUrls: lines(formData.get("imageUrls"))
+      };
+      const project = data.id
+        ? await db.project.update({ where: { id: data.id }, data: projectData })
+        : await db.project.create({ data: projectData });
+
+      if (removed.length) {
+        // A gallery removal can leave other legitimate CMS references to the original file.
+        await db.projectImage.deleteMany({ where: { id: { in: removed.map((image) => image.id) } } });
+      }
+      for (const image of gallery) {
+        const fields = { imagePath: image.imagePath, altText: image.altText, sortOrder: image.sortOrder, isPrimary: image === primary };
+        if (image.id) await db.projectImage.update({ where: { id: image.id }, data: fields });
+        else await db.projectImage.create({ data: { ...fields, projectId: project.id } });
+      }
+      if (data.isFeatured) {
+        await db.project.updateMany({
+          where: { id: { not: project.id }, isFeatured: true },
+          data: { isFeatured: false }
+        });
+      }
+      return syncProjectCaseStudyArticle(db, {
+        projectId: project.id,
+        title: project.title,
+        status: project.status,
+        fullCaseStudy: project.fullCaseStudy,
+        coverImage: project.coverImage,
+        featureOnResources: project.featureOnResources,
+        authorId: user.id
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      projectError("A project or case study with this slug already exists. Please try again.", data.id);
+    }
+    console.error("Could not save project and image references", error);
+    projectError("The project could not be saved. Please retry.", data.id);
   }
-  if (data.isFeatured) {
-    await prisma.project.updateMany({
-      where: { id: { not: project.id }, isFeatured: true },
-      data: { isFeatured: false }
-    });
-  }
-  await syncProjectCaseStudyArticle({
-    projectId: project.id,
-    title: project.title,
-    status: project.status,
-    fullCaseStudy: project.fullCaseStudy,
-    coverImage: project.coverImage,
-    featureOnResources: project.featureOnResources,
-    authorId: user.id
-  });
+  if (articleSlug) refresh(`/resources/${articleSlug}`);
   refresh("/", "/resources", "/admin/projects", "/admin/resources");
   const saveState = `${data.id ? "updated" : "created"}-${data.status === PublishStatus.PUBLISHED ? "published" : "draft"}${uploadedFiles.length ? "-image" : ""}`;
   redirect(`/admin/projects?saved=${saveState}`);
 }
 
-async function syncProjectCaseStudyArticle({
+async function syncProjectCaseStudyArticle(db: Prisma.TransactionClient, {
   projectId,
   title,
   status,
@@ -640,23 +632,22 @@ async function syncProjectCaseStudyArticle({
   featureOnResources: boolean;
   authorId: string;
 }) {
-  const existing = await prisma.resourceArticle.findUnique({ where: { sourceProjectId: projectId } });
+  const existing = await db.resourceArticle.findUnique({ where: { sourceProjectId: projectId } });
 
   if (!featureOnResources) {
     if (existing) {
-      await prisma.resourceArticle.update({
+      await db.resourceArticle.update({
         where: { id: existing.id },
         data: { status: PublishStatus.UNPUBLISHED, publishedAt: null }
       });
-      refresh(`/resources/${existing.slug}`);
     }
-    return;
+    return existing?.slug;
   }
 
-  const categoryId = await getProjectCaseStudyCategoryId();
-  const author = await prisma.user.findUnique({ where: { id: authorId }, select: { id: true } });
+  const categoryId = await getProjectCaseStudyCategoryId(db);
+  const author = await db.user.findUnique({ where: { id: authorId }, select: { id: true } });
   const articleStatus = status === PublishStatus.PUBLISHED ? PublishStatus.PUBLISHED : PublishStatus.DRAFT;
-  const slug = await uniqueResourceSlug(title, existing?.id);
+  const slug = await uniqueResourceSlug(db, title, existing?.id);
   const excerpt = articleExcerpt(fullCaseStudy);
   const payload = {
     title,
@@ -678,9 +669,9 @@ async function syncProjectCaseStudyArticle({
   };
 
   const article = existing
-    ? await prisma.resourceArticle.update({ where: { id: existing.id }, data: payload })
-    : await prisma.resourceArticle.create({ data: payload });
-  refresh(`/resources/${article.slug}`);
+    ? await db.resourceArticle.update({ where: { id: existing.id }, data: payload })
+    : await db.resourceArticle.create({ data: payload });
+  return article.slug;
 }
 
 export async function deleteProject(formData: FormData) {

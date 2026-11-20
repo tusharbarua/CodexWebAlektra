@@ -127,7 +127,9 @@ pm2 start ecosystem.config.cjs
 
 Do not deploy production with `DATABASE_URL="file:..."`. That is the local SQLite format.
 
-## Nginx Skeleton
+## Nginx Skeleton for a standalone deployment
+
+Production uses Dokploy with Traefik. This example applies to standalone Nginx deployments. If Next.js handles `/uploads/`, forward that path with the rest of the site.
 
 ```nginx
 server {
@@ -156,11 +158,6 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-  }
-
-  location ^~ /uploads/ {
-    try_files $uri =404;
-    add_header X-Content-Type-Options "nosniff" always;
   }
 }
 ```

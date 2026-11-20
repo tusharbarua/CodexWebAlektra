@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
+const { uploadRoot, uploadMount, isWritablePersistentMount } = require("./upload-storage");
 
 const appRoot = process.cwd();
 const databaseUrl = process.env.DATABASE_URL || "";
@@ -18,12 +19,6 @@ if (!databaseUrl.startsWith("postgresql://") && !databaseUrl.startsWith("postgre
 
 function ensureDirectory(relativePath) {
   fs.mkdirSync(path.join(appRoot, relativePath), { recursive: true });
-}
-
-function uploadRoot() {
-  const configured = process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim();
-  if (!configured) return path.join(appRoot, "public", "uploads");
-  return path.isAbsolute(configured) ? configured : path.join(appRoot, configured);
 }
 
 function copySeedFiles(seedRelativePath, targetRelativePath) {
@@ -45,13 +40,27 @@ function generatedClientProvider() {
   return schema.match(/datasource\s+db\s*{[\s\S]*?provider\s*=\s*"([^"]+)"/)?.[1];
 }
 
+const uploads = uploadRoot();
+if (process.env.REQUIRE_PERSISTENT_UPLOADS === "true") {
+  try {
+    const mount = uploadMount(uploads);
+    if (!isWritablePersistentMount(mount) || !fs.statSync(uploads).isDirectory()) {
+      throw new Error("Missing writable persistent upload mount");
+    }
+    fs.accessSync(uploads, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
+  } catch {
+    console.error("Upload storage preflight failed. Check UPLOAD_DIR and the writable Dokploy mount before redeploying.");
+    process.exit(1);
+  }
+}
+
 ensureDirectory("public/uploads");
 ensureDirectory("storage");
 ensureDirectory("storage/thermal");
-fs.mkdirSync(uploadRoot(), { recursive: true });
+fs.mkdirSync(uploads, { recursive: true });
 copySeedFiles(".image-seed/uploads", "public/uploads");
-if (path.resolve(uploadRoot()) !== path.resolve(appRoot, "public", "uploads")) {
-  copySeedFiles(".image-seed/uploads", path.relative(appRoot, uploadRoot()));
+if (uploads !== path.resolve(appRoot, "public", "uploads")) {
+  copySeedFiles(".image-seed/uploads", path.relative(appRoot, uploads));
 }
 
 const provider = generatedClientProvider();

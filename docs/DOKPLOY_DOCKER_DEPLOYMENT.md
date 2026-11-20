@@ -93,7 +93,7 @@ Mount these paths:
 
 On first startup, the container copies bundled seed upload files from `/app/.image-seed/uploads` into `/app/public/uploads` without overwriting existing files. This protects first-deploy hero/product media while still allowing a persistent upload volume.
 
-Back up both volumes regularly.
+Back up both volumes regularly. Follow the [website media operations runbook](WEBSITE_MEDIA_OPERATIONS.md) for safe mount changes, backup checks, and restores.
 
 ## Startup And Migration Behavior
 
