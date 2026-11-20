@@ -36,7 +36,7 @@ const videos = [
     youtubeUrl: "https://youtube.com/shorts/NAynisj_9Ww",
     aspectRatio: "9:16",
     project: "Hakkani Group",
-    specifications: ["30 kW Solis hybrid inverter", "60 kWh Solis FlexCore-ID ESS"],
+    specifications: ["150 kW on-grid inverter capacity", "30 kW Solis hybrid inverter", "60 kWh Solis FlexCore-ID ESS"],
     thumbnail: { file: "oar2.jpg", width: 1080, height: 1920 }
   }
 ] satisfies readonly ProjectVideo[];
