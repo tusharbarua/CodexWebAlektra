@@ -1,0 +1,40 @@
+.manager {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px;
+}
+
+.card { min-width: 0; }
+.heading { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+.heading h2 { margin: 0 0 4px; font-size: clamp(1.16rem, 2vw, 1.5rem); }
+.heading p, .drop p { margin: 0; color: var(--muted); }
+.headingIcon { color: var(--green); padding: 4px; }
+.screen { overflow: hidden; aspect-ratio: 16 / 9; border-radius: 13px; background: #102a20; }
+.screen video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.notice { height: 100%; display: grid; align-content: center; justify-items: center; gap: 10px; text-align: center; color: white; padding: 14px; }
+.notice p { margin: 0; max-width: 38ch; }
+.details { display: grid; gap: 10px; margin: 17px 0; }
+.details div { display: grid; align-items: start; grid-template-columns: 86px minmax(0, 1fr); gap: 8px; }
+.details dt, .file small, .feedback { color: var(--muted); font-size: .9rem; }
+.details dd { margin: 0; overflow-wrap: anywhere; }
+.link { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.drop { display: grid; justify-items: center; text-align: center; gap: 9px; background: var(--soft); border: 1px dashed #7ba695; padding: 24px 12px; border-radius: 13px; }
+.drop > svg { color: var(--green); }
+.drop[data-dragging="true"] { border-color: var(--green); background: #e0f2e9; outline: 2px solid var(--green); }
+.selection { margin-top: 14px; }
+.file { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+.file span { min-width: 0; overflow-wrap: anywhere; }
+.file small { display: block; }
+.remove { display: grid; place-items: center; flex: 0 0 36px; height: 36px; color: inherit; background: white; border: 1px solid var(--line); border-radius: 9px; cursor: pointer; }
+.feedback:not(:empty) { margin-top: 14px; }
+.feedback progress { display: block; width: 100%; height: 12px; accent-color: var(--green); }
+.feedback p { margin: 0; }
+.feedback a { text-decoration: underline; }
+.publish { width: 100%; margin-top: 16px; }
+.manager button:disabled { opacity: .52; cursor: not-allowed; }
+.manager button:focus-visible, .link:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+
+@media (max-width: 1080px) {
+  .manager { grid-template-columns: minmax(0, 1fr); }
+}

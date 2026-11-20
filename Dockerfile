@@ -24,6 +24,7 @@ ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 RUN pnpm run build:postgres && rm -rf .next/cache
 
 FROM base AS runner
+RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000

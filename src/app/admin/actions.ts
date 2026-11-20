@@ -1300,6 +1300,7 @@ export async function saveHeroMedia(formData: FormData) {
   });
 
   const existing = data.id ? await prisma.heroMedia.findUnique({ where: { id: data.id } }) : null;
+  if (data.pageKey === PageKey.epc || existing?.pageKey === PageKey.epc) redirect("/admin/hero-media?pageKey=epc");
   const file = getFiles(formData, "mediaFile")[0];
   const posterFile = getFiles(formData, "posterFile")[0];
   let filePath = data.url || existing?.filePath || existing?.url || "";
@@ -1359,6 +1360,7 @@ export async function deleteHeroMedia(formData: FormData) {
   await requireAdmin();
   const id = z.string().parse(formData.get("id"));
   const media = await prisma.heroMedia.findUnique({ where: { id } });
+  if (media?.pageKey === PageKey.epc) redirect("/admin/hero-media?pageKey=epc");
   await prisma.heroMedia.delete({ where: { id } });
   await deleteUniqueUploads(media?.filePath, media?.url, media?.posterImagePath);
   refresh(media ? heroPagePath(media.pageKey) : "/", "/admin/hero-media");

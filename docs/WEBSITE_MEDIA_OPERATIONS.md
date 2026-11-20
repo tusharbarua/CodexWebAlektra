@@ -28,3 +28,9 @@ For restore testing, use `restic check --read-data` and restore a known snapshot
 The VPS audit timer runs at 02:45 Asia/Dhaka. To move the audit to Dokploy, schedule an **Application Job** in **Alektra_Website → Schedules** with command `node scripts/db/diagnose-media.js --require-mount --origin=https://www.alektraepc.com`. If using a VPS timer, select the healthy current website task and execute that same command as its application user. The report names the affected record, field and URL, distinguishes local file failures from public HTTP failures, and exits nonzero for errors. A published record with no configured cover is reported separately as a warning. It only writes to private scheduler logs.
 
 Add `--notify` when the application has working SMTP and a configured `ADMIN_NOTIFICATION_EMAIL` or `ADMIN_EMAIL`. A failing run then sends a short alert without paths or secrets. With no configured mail transport, use the VPS journal failure logs and connect an approved alert destination to receive external notifications. Do not enable unauthenticated public diagnostics.
+
+## EPC homepage hero video
+
+Use **Admin / Hero Media / EPC** to publish an H.264 MP4 or VP8/VP9 WebM. The authenticated upload accepts up to 80 MiB by default. `HERO_VIDEO_MAX_BYTES` controls this limit. The upload streams to `hero/epc` on the existing media volume and uses the runtime image's FFmpeg tools to check the encoding and decode frames before activation.
+
+Every successful replacement has a unique filename. Keep previous EPC hero videos and their records as rollback assets and include them in the daily media backup. There is no automatic deletion. If space requires an approved cleanup, verify the backup, check all CMS records and references to the exact URL, and keep the immediately previous video.

@@ -2,6 +2,8 @@
 
 import { PageKey } from "@prisma/client";
 import { deleteHeroMedia, saveHeroMedia } from "@/app/admin/actions";
+import { EpcHeroVideoManager } from "@/components/EpcHeroVideoManager";
+import { getEpcHeroMaxBytes, getEpcHeroPreview } from "@/lib/hero-media";
 import { SingleFilePreview } from "@/components/SingleFilePreview";
 import { prisma } from "@/lib/prisma";
 
@@ -17,11 +19,20 @@ const pageTabs: Array<{ key: PageKey; label: string; title: string; description:
 export default async function AdminHeroMediaPage({ searchParams }: { searchParams: Promise<{ pageKey?: string; edit?: string; error?: string }> }) {
   const { edit, error, pageKey } = await searchParams;
   const selectedPageKey = pageTabs.some((tab) => tab.key === pageKey) ? pageKey as PageKey : PageKey.epc;
-  const [items, current] = await Promise.all([
-    prisma.heroMedia.findMany({ orderBy: [{ pageKey: "asc" }, { sortOrder: "asc" }, { updatedAt: "desc" }] }),
-    edit ? prisma.heroMedia.findUnique({ where: { id: edit } }) : null
-  ]);
+  const current = edit ? await prisma.heroMedia.findUnique({ where: { id: edit } }) : null;
   const activePageKey = current?.pageKey ?? selectedPageKey;
+  if (activePageKey === PageKey.epc) {
+    const preview = await getEpcHeroPreview();
+    return (
+      <div>
+        <p className="kicker">Hero Media</p>
+        <h1>Homepage hero video</h1>
+        <HeroTabs active={PageKey.epc} />
+        <EpcHeroVideoManager initial={preview} maxBytes={getEpcHeroMaxBytes()} />
+      </div>
+    );
+  }
+  const items = await prisma.heroMedia.findMany({ orderBy: [{ pageKey: "asc" }, { sortOrder: "asc" }, { updatedAt: "desc" }] });
   const activeTab = pageTabs.find((tab) => tab.key === activePageKey) ?? pageTabs[0];
   const activeItems = items.filter((item) => item.pageKey === activePageKey);
   const primary = activeItems.find((item) => item.isPrimary && item.isPublished) ?? activeItems.find((item) => item.isPublished);
@@ -33,9 +44,7 @@ export default async function AdminHeroMediaPage({ searchParams }: { searchParam
       <p className="admin-muted">Hero backgrounds are independent for EPC, Thermal, Sparkle and Mapping. Primary media is scoped to the selected page only.</p>
       {error ? <div className="admin-error">{decodeURIComponent(error)}</div> : null}
 
-      <div className="order-period-tabs hero-media-tabs">
-        {pageTabs.map((tab) => <a className={activePageKey === tab.key ? "active" : ""} href={`/admin/hero-media?pageKey=${tab.key}`} key={tab.key}>{tab.label}</a>)}
-      </div>
+      <HeroTabs active={activePageKey} />
 
       <section className="panel hero-media-page-panel">
         <div className="admin-section-heading">
@@ -92,6 +101,14 @@ export default async function AdminHeroMediaPage({ searchParams }: { searchParam
         ))}
         {!activeItems.length ? <div className="admin-empty-state">No hero media uploaded for {labelFor(activePageKey)} yet.</div> : null}
       </div>
+    </div>
+  );
+}
+
+function HeroTabs({ active }: { active: PageKey }) {
+  return (
+    <div className="order-period-tabs hero-media-tabs">
+      {pageTabs.map((tab) => <a className={active === tab.key ? "active" : ""} href={`/admin/hero-media?pageKey=${tab.key}`} key={tab.key}>{tab.label}</a>)}
     </div>
   );
 }

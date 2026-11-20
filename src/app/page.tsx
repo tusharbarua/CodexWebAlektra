@@ -30,6 +30,7 @@ import { EpcProposalButton } from "@/components/EpcProposalButton";
 import { EpcProposalForm } from "@/components/EpcProposalForm";
 import EpcProjectShowcase from "@/components/EpcProjectShowcase";
 import SolisProjectVideos from "@/components/SolisProjectVideos";
+import { epcHeroFallbackVideo } from "@/lib/epc-hero-video";
 import { getPrimaryHeroMedia } from "@/lib/hero-media";
 import { MarkdownBlock, getPublishedPage, sectionByKey, settings } from "@/lib/page-cms";
 import { prisma } from "@/lib/prisma";
@@ -147,7 +148,7 @@ export default async function HomePage() {
             media={heroMedia}
             videoClassName="epc-hero-video"
             imageClassName="epc-hero-video"
-            fallbackVideoSrc="/uploads/hero/epc/epc-hero-video.mp4"
+            fallbackVideoSrc={epcHeroFallbackVideo}
             fallbackPosterImage={String(heroSettings.posterImage || "")}
           />
         </div>
